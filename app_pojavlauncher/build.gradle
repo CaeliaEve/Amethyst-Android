@@ -252,6 +252,8 @@ dependencies {
     implementation "net.java.dev.jna:jna:5.14.0@aar"
 
     implementation project(":androidnsbypass")
+    testImplementation 'junit:junit:4.13.2'
 
 }
 apply from: rootProject.file('gradle/prefab_bypass.gradle')
+
