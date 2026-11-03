@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class GTNHProfileHelper {
 
@@ -99,7 +101,7 @@ public class GTNHProfileHelper {
      * 获取专为玄戒 O1 / 8 Gen 2 调优的 Java 25 GTNH 黄金参数
      */
     public static List<String> getRecommendedJvmArgs(long maxMemoryMb) {
-        long xms = Math.min(maxMemoryMb, Math.max(3072, maxMemoryMb - 2048));
+        long xms = Math.max(2048, Math.min(maxMemoryMb, maxMemoryMb - 2048));
         return new ArrayList<>(Arrays.asList(
                 "-Dfile.encoding=UTF-8",
                 "-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader",
@@ -107,7 +109,6 @@ public class GTNHProfileHelper {
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseCompactObjectHeaders",
                 "-XX:+UseZGC",
-                "-XX:+ZGenerational",
                 "-Xms" + xms + "M",
                 "-Xmx" + maxMemoryMb + "M",
                 "-XX:+TieredCompilation",
@@ -115,5 +116,94 @@ public class GTNHProfileHelper {
                 "-XX:CompileThreshold=1200",
                 "-Xverify:none"
         ));
+    }
+
+    /**
+     * 健壮地合并现有 JVM 参数与推荐参数：
+     * 1. 针对 -Xmx 与 -Xms 使用正则 (-Xmx[0-9]+[mMkKgG]?) 替换现有值（若推荐参数中有指定），若不存在则追加；
+     * 2. 对其余推荐参数按前缀排重追加，避免覆盖用户自定义配置或重复前缀。
+     */
+    public static String mergeJvmArgs(String existingArgs, List<String> recommendedArgs) {
+        if (recommendedArgs == null || recommendedArgs.isEmpty()) {
+            return existingArgs != null ? existingArgs.trim() : "";
+        }
+        if (existingArgs == null || existingArgs.trim().isEmpty()) {
+            return String.join(" ", recommendedArgs);
+        }
+
+        String current = existingArgs.trim();
+
+        // 提取推荐参数中的 -Xmx 与 -Xms
+        String recXmx = null;
+        String recXms = null;
+        for (String arg : recommendedArgs) {
+            if (arg.startsWith("-Xmx")) {
+                recXmx = arg;
+            } else if (arg.startsWith("-Xms")) {
+                recXms = arg;
+            }
+        }
+
+        Pattern xmxPattern = Pattern.compile("(-Xmx[0-9]+[mMkKgG]?)");
+        if (recXmx != null) {
+            Matcher m = xmxPattern.matcher(current);
+            if (m.find()) {
+                current = m.replaceAll(recXmx);
+            } else {
+                current = current + " " + recXmx;
+            }
+        }
+
+        Pattern xmsPattern = Pattern.compile("(-Xms[0-9]+[mMkKgG]?)");
+        if (recXms != null) {
+            Matcher m = xmsPattern.matcher(current);
+            if (m.find()) {
+                current = m.replaceAll(recXms);
+            } else {
+                current = current + " " + recXms;
+            }
+        }
+
+        // 其余参数按前缀排重追加
+        for (String arg : recommendedArgs) {
+            if (arg.startsWith("-Xmx") || arg.startsWith("-Xms")) {
+                continue;
+            }
+            String prefix = getArgPrefix(arg);
+            if (!hasArgWithPrefix(current, prefix)) {
+                current = current + " " + arg;
+            }
+        }
+
+        return current.trim().replaceAll("\\s+", " ");
+    }
+
+    private static String getArgPrefix(String arg) {
+        if (arg.contains("=")) {
+            return arg.substring(0, arg.indexOf('=') + 1);
+        }
+        if (arg.startsWith("-Xverify:")) {
+            return "-Xverify:";
+        }
+        if (arg.startsWith("-XX:+") || arg.startsWith("-XX:-")) {
+            return arg.substring(5);
+        }
+        return arg;
+    }
+
+    private static boolean hasArgWithPrefix(String currentArgs, String prefix) {
+        if (currentArgs == null || currentArgs.isEmpty()) {
+            return false;
+        }
+        String[] tokens = currentArgs.split("\\s+");
+        for (String token : tokens) {
+            if (token.startsWith(prefix) || token.equals(prefix)) {
+                return true;
+            }
+            if ((token.startsWith("-XX:+") || token.startsWith("-XX:-")) && token.substring(5).equals(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

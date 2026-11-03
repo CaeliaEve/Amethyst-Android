@@ -71,6 +71,7 @@ struct {
 } abort_waiter_data;
 
 _Noreturn extern void nominal_exit(int code, bool is_signal);
+extern void bigcore_set_affinity(void);
 
 _Noreturn static void* abort_waiter_thread(void* extraArg) {
     // Don't allow this thread to receive signals this thread is tracking.
@@ -122,6 +123,7 @@ static void abort_waiter_setup() {
 }
 
 static jint launchJVM(int margc, char** margv) {
+    bigcore_set_affinity();
    void* libjli = dlopen("libjli.so", RTLD_LAZY | RTLD_GLOBAL);
 
    // Unset all signal handlers to create a good slate for JVM signal detection.

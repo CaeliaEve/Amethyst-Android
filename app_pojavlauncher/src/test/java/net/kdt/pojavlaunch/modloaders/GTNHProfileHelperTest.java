@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.List;
 
 public class GTNHProfileHelperTest {
@@ -113,7 +114,7 @@ public class GTNHProfileHelperTest {
         Assert.assertTrue(args.contains("-XX:+UnlockExperimentalVMOptions"));
         Assert.assertTrue(args.contains("-XX:+UseCompactObjectHeaders"));
         Assert.assertTrue(args.contains("-XX:+UseZGC"));
-        Assert.assertTrue(args.contains("-XX:+ZGenerational"));
+        Assert.assertFalse(args.contains("-XX:+ZGenerational"));
         Assert.assertTrue(args.contains("-Xms4096M"));
         Assert.assertTrue(args.contains("-Xmx6144M"));
         Assert.assertTrue(args.contains("-XX:+TieredCompilation"));
@@ -129,8 +130,64 @@ public class GTNHProfileHelperTest {
         Assert.assertTrue(argsLow.contains("-Xms2048M"));
         Assert.assertTrue(argsLow.contains("-Xmx2048M"));
 
+        List<String> argsMid = GTNHProfileHelper.getRecommendedJvmArgs(4096);
+        Assert.assertTrue(argsMid.contains("-Xms2048M"));
+        Assert.assertTrue(argsMid.contains("-Xmx4096M"));
+
         List<String> argsHigh = GTNHProfileHelper.getRecommendedJvmArgs(8192);
         Assert.assertTrue(argsHigh.contains("-Xms6144M"));
         Assert.assertTrue(argsHigh.contains("-Xmx8192M"));
+    }
+
+    @Test
+    public void testMergeJvmArgsWithEmptyExisting() {
+        List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
+        String merged = GTNHProfileHelper.mergeJvmArgs("", recArgs);
+        for (String arg : recArgs) {
+            Assert.assertTrue("Missing arg: " + arg, merged.contains(arg));
+        }
+
+        String mergedNull = GTNHProfileHelper.mergeJvmArgs(null, recArgs);
+        for (String arg : recArgs) {
+            Assert.assertTrue("Missing arg: " + arg, mergedNull.contains(arg));
+        }
+    }
+
+    @Test
+    public void testMergeJvmArgsReplacesXmxAndXms() {
+        String existing = "-Xms1024M -Xmx2048M -Dcustom.flag=hello";
+        List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
+        String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
+
+        Assert.assertTrue(merged.contains("-Xms4096M"));
+        Assert.assertTrue(merged.contains("-Xmx6144M"));
+        Assert.assertFalse(merged.contains("-Xms1024M"));
+        Assert.assertFalse(merged.contains("-Xmx2048M"));
+        Assert.assertTrue(merged.contains("-Dcustom.flag=hello"));
+        Assert.assertTrue(merged.contains("-XX:+UseCompactObjectHeaders"));
+        Assert.assertTrue(merged.contains("-XX:+UseZGC"));
+    }
+
+    @Test
+    public void testMergeJvmArgsPrefixDeduplication() {
+        String existing = "-Dfile.encoding=GBK -XX:CICompilerCount=8 -XX:+UseZGC";
+        List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
+        String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
+
+        // User's custom encoding and compiler count should be preserved, not overwritten or duplicated
+        Assert.assertTrue(merged.contains("-Dfile.encoding=GBK"));
+        Assert.assertFalse(merged.contains("-Dfile.encoding=UTF-8"));
+        Assert.assertTrue(merged.contains("-XX:CICompilerCount=8"));
+        Assert.assertFalse(merged.contains("-XX:CICompilerCount=4"));
+
+        // -XX:+UseZGC should only appear once
+        int firstIndex = merged.indexOf("-XX:+UseZGC");
+        int lastIndex = merged.lastIndexOf("-XX:+UseZGC");
+        Assert.assertEquals("Duplicate -XX:+UseZGC detected", firstIndex, lastIndex);
+
+        // New flags should still be added
+        Assert.assertTrue(merged.contains("-XX:+UseCompactObjectHeaders"));
+        Assert.assertTrue(merged.contains("-Xms4096M"));
+        Assert.assertTrue(merged.contains("-Xmx6144M"));
     }
 }

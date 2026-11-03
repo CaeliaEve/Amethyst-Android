@@ -207,24 +207,20 @@ public class LauncherActivity extends BaseActivity {
                 // 1. 自动清洗 lwjgl3ify.cfg
                 GTNHProfileHelper.sanitizeLwjgl3ifyConfig(gameDir);
 
-                // 2. 自动切换到 JRE 25 运行时 (如果已安装)
+                long ramMb = LauncherPreferences.PREF_RAM_ALLOCATION > 0 ? LauncherPreferences.PREF_RAM_ALLOCATION : 6144;
                 String jre25Name = MultiRTUtils.getExactJreName(25);
                 if (jre25Name != null) {
                     prof.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX + jre25Name;
+                    // 只有在确定是 JRE 25 时才注入 JDK 25 的 Compact Object Headers 与 ZGC 参数
+                    List<String> gtnhArgs = GTNHProfileHelper.getRecommendedJvmArgs(ramMb);
+                    prof.javaArgs = GTNHProfileHelper.mergeJvmArgs(prof.javaArgs, gtnhArgs);
+                    LauncherProfiles.mainProfileJson.profiles.put(selectedProfile, prof);
+                    LauncherProfiles.write();
+                    Log.i("GTNH-Launch", "Applied Xuanjie O1 & OpenJDK 25 deep optimizations for GTNH");
+                } else {
+                    // 未安装 JRE 25 时，提示或仅做基础配置清洗，严禁注入 Java 25 专属不兼容参数
+                    Log.w("GTNH-Launch", "GTNH detected, but OpenJDK 25 is not installed yet. Skipping Java 25 experimental flags.");
                 }
-
-                // 3. 注入黄金启动参数
-                List<String> gtnhArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
-                StringBuilder sb = new StringBuilder(prof.javaArgs != null ? prof.javaArgs : "");
-                for (String arg : gtnhArgs) {
-                    if (!sb.toString().contains(arg.split("=")[0])) {
-                        sb.append(" ").append(arg);
-                    }
-                }
-                prof.javaArgs = sb.toString().trim();
-                LauncherProfiles.mainProfileJson.profiles.put(selectedProfile, prof);
-                LauncherProfiles.write();
-                Log.i("GTNH-Launch", "Applied Xuanjie O1 & OpenJDK 25 deep optimizations for GTNH");
             } catch (Exception e) {
                 Log.w("GTNH-Launch", "Failed to apply GTNH automatic optimizations", e);
             }

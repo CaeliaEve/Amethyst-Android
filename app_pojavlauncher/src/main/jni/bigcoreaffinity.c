@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <sched.h>
 #include <string.h>
+#include <errno.h>
 
 #define FREQ_MAX 256
 #define MAX_CORES 32
@@ -28,24 +29,23 @@ void bigcore_set_affinity() {
     unsigned int corecnt = 0;
 
     // 1. 扫描所有可用核心的最大频率
-    while (corecnt < MAX_CORES) {
-        bigcore_format_cpu_path(path_buffer, corecnt);
+    for (unsigned int cpu = 0; cpu < MAX_CORES; cpu++) {
+        bigcore_format_cpu_path(path_buffer, cpu);
         int corefreqfd = open(path_buffer, O_RDONLY);
-        if (corefreqfd != -1) {
-            ssize_t read_count = read(corefreqfd, freq_buffer, FREQ_MAX - 1);
-            close(corefreqfd);
-            if (read_count > 0) {
-                freq_buffer[read_count] = 0;
-                unsigned long core_freq = strtoul(freq_buffer, &discard, 10);
-                freqs[corecnt] = core_freq;
-                if (core_freq > max_freq) {
-                    max_freq = core_freq;
-                }
-            }
-        } else {
-            break;
+        if (corefreqfd == -1) {
+            continue;
         }
-        corecnt++;
+        ssize_t read_count = read(corefreqfd, freq_buffer, FREQ_MAX - 1);
+        close(corefreqfd);
+        if (read_count > 0) {
+            freq_buffer[read_count] = 0;
+            unsigned long core_freq = strtoul(freq_buffer, &discard, 10);
+            freqs[cpu] = core_freq;
+            if (core_freq > max_freq) {
+                max_freq = core_freq;
+            }
+            corecnt++;
+        }
     }
 
     if (corecnt == 0 || max_freq == 0) {
@@ -59,18 +59,18 @@ void bigcore_set_affinity() {
     CPU_ZERO(&bigcore_affinity_set);
     unsigned int bound_cores = 0;
 
-    for (unsigned int i = 0; i < corecnt; i++) {
-        if (freqs[i] >= threshold) {
-            CPU_SET_S(i, CPU_SETSIZE, &bigcore_affinity_set);
+    for (unsigned int i = 0; i < MAX_CORES; i++) {
+        if (freqs[i] > 0 && freqs[i] >= threshold) {
+            CPU_SET_S(i, sizeof(bigcore_affinity_set), &bigcore_affinity_set);
             bound_cores++;
             printf("bigcore: added CPU %u (freq: %lu kHz) to cluster\n", i, freqs[i]);
         }
     }
 
     // 3. 应用集群亲和性
-    int result = sched_setaffinity(0, CPU_SETSIZE, &bigcore_affinity_set);
+    int result = sched_setaffinity(0, sizeof(bigcore_affinity_set), &bigcore_affinity_set);
     if (result != 0) {
-        printf("bigcore: setting affinity failed: %s\n", strerror(result));
+        printf("bigcore: setting affinity failed: %s\n", strerror(errno));
     } else {
         printf("bigcore: successfully bound thread to %u big/super performance cores (max: %lu kHz)\n", bound_cores, max_freq);
     }
