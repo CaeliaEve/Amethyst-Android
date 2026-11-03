@@ -41,7 +41,9 @@ import net.kdt.pojavlaunch.fragments.MicrosoftLoginFragment;
 import net.kdt.pojavlaunch.fragments.SelectAuthFragment;
 import net.kdt.pojavlaunch.lifecycle.ContextAwareDoneListener;
 import net.kdt.pojavlaunch.lifecycle.ContextExecutor;
+import net.kdt.pojavlaunch.modloaders.GTNHProfileHelper;
 import net.kdt.pojavlaunch.modloaders.LWJGL3ifyUtils;
+import net.kdt.pojavlaunch.multirt.MultiRTUtils;
 import net.kdt.pojavlaunch.modloaders.modpacks.ModloaderInstallTracker;
 import net.kdt.pojavlaunch.modloaders.modpacks.api.CommonApi;
 import net.kdt.pojavlaunch.modloaders.modpacks.api.ModLoader;
@@ -191,6 +193,41 @@ public class LauncherActivity extends BaseActivity {
             Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
             ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
             return false;
+        }
+
+        File gameDir = new File(Tools.DIR_GAME_HOME, prof.gameDir != null ? prof.gameDir : "");
+        if (!GTNHProfileHelper.isGTNHInstance(gameDir)) {
+            File profileDir = Tools.getGameDirPath(prof);
+            if (GTNHProfileHelper.isGTNHInstance(profileDir)) {
+                gameDir = profileDir;
+            }
+        }
+        if (GTNHProfileHelper.isGTNHInstance(gameDir)) {
+            try {
+                // 1. 自动清洗 lwjgl3ify.cfg
+                GTNHProfileHelper.sanitizeLwjgl3ifyConfig(gameDir);
+
+                // 2. 自动切换到 JRE 25 运行时 (如果已安装)
+                String jre25Name = MultiRTUtils.getExactJreName(25);
+                if (jre25Name != null) {
+                    prof.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX + jre25Name;
+                }
+
+                // 3. 注入黄金启动参数
+                List<String> gtnhArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
+                StringBuilder sb = new StringBuilder(prof.javaArgs != null ? prof.javaArgs : "");
+                for (String arg : gtnhArgs) {
+                    if (!sb.toString().contains(arg.split("=")[0])) {
+                        sb.append(" ").append(arg);
+                    }
+                }
+                prof.javaArgs = sb.toString().trim();
+                LauncherProfiles.mainProfileJson.profiles.put(selectedProfile, prof);
+                LauncherProfiles.write();
+                Log.i("GTNH-Launch", "Applied Xuanjie O1 & OpenJDK 25 deep optimizations for GTNH");
+            } catch (Exception e) {
+                Log.w("GTNH-Launch", "Failed to apply GTNH automatic optimizations", e);
+            }
         }
 
         // Override whatever version is in use and replace it with lwjgl3ify if needed
