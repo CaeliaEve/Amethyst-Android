@@ -99,7 +99,14 @@ public class MainMenuFragment extends Fragment {
         Button mCheckUpdateButton = view.findViewById(R.id.check_update_button);
         if (mCheckUpdateButton != null) {
             mCheckUpdateButton.setOnClickListener(v -> {
-                net.kdt.pojavlaunch.updater.MCPatchUpdater.checkAndPromptUpdate(requireActivity(), getCurrentProfileDirectory());
+                net.kdt.pojavlaunch.updater.MCPatchUpdater.checkAndPromptUpdate(
+                        requireActivity(),
+                        getCurrentProfileDirectory(),
+                        getCurrentProfileVersionId(),
+                        () -> {
+                            if (mVersionSpinner != null) mVersionSpinner.reloadProfiles();
+                        }
+                );
             });
         }
 
@@ -116,6 +123,15 @@ public class MainMenuFragment extends Fragment {
         MinecraftProfile profileObject = LauncherProfiles.mainProfileJson.profiles.get(currentProfile);
         if(profileObject == null) return new File(Tools.DIR_GAME_NEW);
         return Tools.getGameDirPath(profileObject);
+    }
+
+    private String getCurrentProfileVersionId() {
+        String currentProfile = LauncherPreferences.DEFAULT_PREF.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, null);
+        if(!Tools.isValidString(currentProfile)) return null;
+        LauncherProfiles.load();
+        MinecraftProfile profileObject = LauncherProfiles.mainProfileJson.profiles.get(currentProfile);
+        if(profileObject == null) return null;
+        return profileObject.lastVersionId;
     }
 
     @Override

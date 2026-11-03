@@ -1,6 +1,6 @@
 package net.kdt.pojavlaunch.updater;
 
-import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
@@ -51,9 +51,76 @@ public class MCPatchUpdaterTest {
         Assert.assertEquals("2.2.0", missing3.get(1).label);
         Assert.assertEquals("2.2.1", missing3.get(2).label);
 
-        // 4. Current version is unknown -> missing should be all
+        // 4. Current version is empty/null -> missing should be all (fresh install)
         List<MCPatchUpdater.VersionIndex> missing4 = MCPatchUpdater.calculateMissingVersions(versions, "");
         Assert.assertEquals(4, missing4.size());
+
+        List<MCPatchUpdater.VersionIndex> missingNull = MCPatchUpdater.calculateMissingVersions(versions, null);
+        Assert.assertEquals(4, missingNull.size());
+
+        // 5. Unknown version string -> must throw IllegalStateException to guard against corruption
+        try {
+            MCPatchUpdater.calculateMissingVersions(versions, "unknown-custom-version");
+            Assert.fail("Expected IllegalStateException for unknown version");
+        } catch (IllegalStateException expected) {
+            Assert.assertTrue(expected.getMessage().contains("unknown-custom-version"));
+        }
+    }
+
+    @Test
+    public void testBuildUpdatePlanLifecycleAndDeduplication() throws Exception {
+        // Construct simulated multi-version progression matching real server:
+        // Version 2.1.1 adds A
+        // Version 2.1.2 adds B
+        // Version 2.1.4 deletes B and adds C
+        // Version 2.2.0 deletes A and adds D
+        // Version 2.2.1 adds E
+        List<MCPatchUpdater.VersionIndex> missing = new ArrayList<>();
+        missing.add(new MCPatchUpdater.VersionIndex("2.1.1", "2.1.1.tar", 0, 100, ""));
+        missing.add(new MCPatchUpdater.VersionIndex("2.1.2", "2.1.2.tar", 0, 100, ""));
+        missing.add(new MCPatchUpdater.VersionIndex("2.1.4", "2.1.4.tar", 0, 100, ""));
+        missing.add(new MCPatchUpdater.VersionIndex("2.2.0", "2.2.0.tar", 0, 100, ""));
+        missing.add(new MCPatchUpdater.VersionIndex("2.2.1", "2.2.1.tar", 0, 100, ""));
+
+        MCPatchUpdater.MetaFetcher mockFetcher = (filename, offset, len) -> {
+            if ("2.1.1.tar".equals(filename)) {
+                return "[{\"label\":\"2.1.1\",\"logs\":\"Update 2.1.1\",\"changes\":[{\"operation\":\"update-file\",\"path\":\"mods/modA-v1.jar\",\"len\":1000}]}]";
+            } else if ("2.1.2.tar".equals(filename)) {
+                return "[{\"label\":\"2.1.2\",\"logs\":\"Update 2.1.2\",\"changes\":[{\"operation\":\"update-file\",\"path\":\"mods/modB-v1.jar\",\"len\":2000}]}]";
+            } else if ("2.1.4.tar".equals(filename)) {
+                return "[{\"label\":\"2.1.4\",\"logs\":\"Update 2.1.4\",\"changes\":[{\"operation\":\"delete-file\",\"path\":\"mods/modB-v1.jar\"},{\"operation\":\"update-file\",\"path\":\"mods/modC-v1.jar\",\"len\":3000}]}]";
+            } else if ("2.2.0.tar".equals(filename)) {
+                return "[{\"label\":\"2.2.0\",\"logs\":\"Update 2.2.0\",\"changes\":[{\"operation\":\"delete-file\",\"path\":\"mods/modA-v1.jar\"},{\"operation\":\"update-file\",\"path\":\"mods/modD-v1.jar\",\"len\":4000}]}]";
+            } else if ("2.2.1.tar".equals(filename)) {
+                return "[{\"label\":\"2.2.1\",\"logs\":\"Update 2.2.1\",\"changes\":[{\"operation\":\"update-file\",\"path\":\"mods/modE-v1.jar\",\"len\":5000}]}]";
+            }
+            return "[]";
+        };
+
+        MCPatchUpdater.UpdatePlan plan = MCPatchUpdater.buildUpdatePlan(missing, mockFetcher);
+
+        // CRITICAL VERIFICATION:
+        // modA-v1 and modB-v1 were deleted by later versions.
+        // Therefore, neither modA-v1 nor modB-v1 should be in updateFiles!
+        Assert.assertEquals(3, plan.updateFiles.size());
+        List<String> paths = new ArrayList<>();
+        for (MCPatchUpdater.UpdateFileOp op : plan.updateFiles) {
+            paths.add(op.path);
+        }
+        Assert.assertTrue(paths.contains("mods/modC-v1.jar"));
+        Assert.assertTrue(paths.contains("mods/modD-v1.jar"));
+        Assert.assertTrue(paths.contains("mods/modE-v1.jar"));
+        Assert.assertFalse(paths.contains("mods/modA-v1.jar"));
+        Assert.assertFalse(paths.contains("mods/modB-v1.jar"));
+
+        // Download size should only sum the kept updates: 3000 + 4000 + 5000 = 12000
+        Assert.assertEquals(12000L, plan.totalDownloadBytes);
+
+        // Changelogs should have newest on top
+        String logs = plan.changelogs.toString();
+        int idx221 = logs.indexOf("[2.2.1]");
+        int idx211 = logs.indexOf("[2.1.1]");
+        Assert.assertTrue(idx221 >= 0 && idx211 >= 0 && idx221 < idx211);
     }
 
     @Test
@@ -79,11 +146,12 @@ public class MCPatchUpdaterTest {
     @Test
     public void testParseYamlConfigBase64() {
         MCPatchUpdater.UpdateContext ctx = new MCPatchUpdater.UpdateContext();
-        String yml = "urls:\n  - bWNwYXRjaDovL3NoZ3Quc3RvcmU6NjcwMA== # comment\nversion-file-path: version-label.txt\n";
+        String yml = "urls:\n  - bWNwYXRjaDovL3NoZ3Quc3RvcmU6NjcwMA== # comment\nversion-file-path: version-label.txt\nprivate-timeout: 15000\n";
         MCPatchUpdater.parseYamlConfig(yml, ctx);
 
         Assert.assertEquals("shgt.store", ctx.serverHost);
         Assert.assertEquals(6700, ctx.serverPort);
+        Assert.assertEquals(15000, ctx.timeoutMs);
     }
 
     @Test
