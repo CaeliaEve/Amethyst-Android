@@ -111,7 +111,13 @@ public class LauncherActivity extends BaseActivity {
                             }
                             ModLoader loaderInfo = new CommonApi(getString(R.string.curseforge_api_key)).importModpack(modpackFile);
                             modpackFile.delete();
-                            if (loaderInfo == null) return;
+                            if (loaderInfo == null) {
+                                Tools.runOnUiThread(() -> {
+                                    android.widget.Toast.makeText(this, R.string.modpack_install_notification_success, android.widget.Toast.LENGTH_SHORT).show();
+                                    getSupportFragmentManager().popBackStack(null, androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+                                });
+                                return;
+                            }
                             loaderInfo.getDownloadTask(new NotificationDownloadListener(this, loaderInfo)).run();
                         } catch (IOException e) {
                             Tools.showErrorRemote(this, R.string.modpack_install_download_failed, e);
