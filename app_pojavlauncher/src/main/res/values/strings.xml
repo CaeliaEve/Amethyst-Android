@@ -516,5 +516,13 @@
     <string name="import_modpack_copy">Copying modpack file to cache… (%s MB/ %s MB)</string>
     <string name="angelica_found_sfpew_notice">Angelica mod found, Simple FPE Wrapper not needed</string>
     <string name="use_angle_checkbox">Use ANGLE (might help FPS)</string>
+    <string name="check_server_update">Check server update</string>
+    <string name="mcpatch_checking">Checking server updates...</string>
+    <string name="mcpatch_no_update">The client is already up to date (%s).</string>
+    <string name="mcpatch_update_available">Server update available: %s</string>
+    <string name="mcpatch_update_now">Update Now</string>
+    <string name="mcpatch_updating">Updating client...</string>
+    <string name="mcpatch_update_success">Client updated successfully to %s!</string>
+    <string name="mcpatch_update_failed">Update failed: %s</string>
 
 </resources>

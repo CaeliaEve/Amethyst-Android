@@ -96,6 +96,12 @@ public class MainMenuFragment extends Fragment {
 
         });
 
+        Button mCheckUpdateButton = view.findViewById(R.id.check_update_button);
+        if (mCheckUpdateButton != null) {
+            mCheckUpdateButton.setOnClickListener(v -> {
+                net.kdt.pojavlaunch.updater.MCPatchUpdater.checkAndPromptUpdate(requireActivity(), getCurrentProfileDirectory());
+            });
+        }
 
         mNewsButton.setOnLongClickListener((v)->{
             Tools.swapFragment(requireActivity(), GamepadMapperFragment.class, GamepadMapperFragment.TAG, null);

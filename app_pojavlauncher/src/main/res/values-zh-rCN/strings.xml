@@ -435,4 +435,12 @@
     <string name="oldL4JFound">你正在使用的 Legacy4J 版本未包含 Android 修复！你需要在手柄设置中手动启用 SDL 才能获得最佳体验！</string>
     <string name="global_warning">警告！</string>
     <string name="controllableFound">Controllable 目前启动时有概率随机崩溃。你可以继续尝试并等待其成功启动，或者使用其他模组，例如 Controlify。</string>
+    <string name="check_server_update">检查服务器更新</string>
+    <string name="mcpatch_checking">正在检查服务器更新...</string>
+    <string name="mcpatch_no_update">客户端已是最新版本 (%s)，暂无更新。</string>
+    <string name="mcpatch_update_available">发现服务器更新: %s</string>
+    <string name="mcpatch_update_now">立即更新</string>
+    <string name="mcpatch_updating">正在更新客户端...</string>
+    <string name="mcpatch_update_success">客户端已成功更新至 %s！</string>
+    <string name="mcpatch_update_failed">更新失败: %s</string>
 </resources>
