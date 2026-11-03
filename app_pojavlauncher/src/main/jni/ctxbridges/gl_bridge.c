@@ -20,6 +20,8 @@
 
 static __thread gl_render_window_t* currentBundle;
 static EGLDisplay g_EglDisplay;
+static volatile bool g_in_background = false;
+static EGLSurface g_shared_pbuffer = EGL_NO_SURFACE;
 
 bool gl_init() {
     if(!dlsym_EGL()) return false;
@@ -41,6 +43,12 @@ gl_render_window_t* gl_get_current() {
 
 static void gl4esi_get_display_dimensions(int* width, int* height) {
     if(currentBundle == NULL) goto zero;
+    if((currentBundle->surface == g_shared_pbuffer || g_in_background) &&
+       pojav_environ != NULL && pojav_environ->savedWidth > 0 && pojav_environ->savedHeight > 0) {
+        *width = pojav_environ->savedWidth;
+        *height = pojav_environ->savedHeight;
+        return;
+    }
     EGLSurface surface = currentBundle->surface;
     // Fetch dimensions from the EGL surface - the most reliable way
     EGLBoolean result_width = eglQuerySurface_p(g_EglDisplay, surface, EGL_WIDTH, width);
@@ -87,7 +95,7 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
             printf("EGLBridge: Binding to OpenGL ES\n");
             bindResult = eglBindAPI_p(EGL_OPENGL_ES_API);
         }
-        if (!bindResult) printf("EGLBridge: bind failed: %p\n", eglGetError_p());
+        if (!bindResult) printf("EGLBridge: bind failed: %d\n", eglGetError_p());
     }
 
     int libgl_es = strtol(getenv("LIBGL_ES"), NULL, 0);
@@ -102,9 +110,6 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
     }
     return bundle;
 }
-
-static volatile bool g_in_background = false;
-static EGLSurface g_shared_pbuffer = EGL_NO_SURFACE;
 
 static EGLSurface get_or_create_shared_pbuffer(gl_render_window_t* bundle) {
     if (g_shared_pbuffer != EGL_NO_SURFACE) {
@@ -134,8 +139,12 @@ Java_net_kdt_pojavlaunch_utils_JREUtils_nativeSetBackgroundMode(JNIEnv* env, jcl
             pojav_environ->mainWindowBundle->state = STATE_RENDERER_NEW_WINDOW;
         } else {
             if (pojav_environ->pojavWindow != NULL) {
-                pojav_environ->mainWindowBundle->newNativeSurface = pojav_environ->pojavWindow;
-                pojav_environ->mainWindowBundle->state = STATE_RENDERER_NEW_WINDOW;
+                int32_t w = ANativeWindow_getWidth(pojav_environ->pojavWindow);
+                int32_t h = ANativeWindow_getHeight(pojav_environ->pojavWindow);
+                if (w > 0 && h > 0) {
+                    pojav_environ->mainWindowBundle->newNativeSurface = pojav_environ->pojavWindow;
+                    pojav_environ->mainWindowBundle->state = STATE_RENDERER_NEW_WINDOW;
+                }
             }
         }
     }
@@ -161,15 +170,27 @@ void gl_swap_surface(gl_render_window_t* bundle) {
 
     // Attach to active ANativeWindow (foreground) or 1x1 PBuffer (background)
     if (!g_in_background && bundle->newNativeSurface != NULL) {
-        LOGI("gl_swap_surface: Switching to active ANativeWindow");
-        bundle->nativeSurface = bundle->newNativeSurface;
-        bundle->newNativeSurface = NULL;
-        ANativeWindow_acquire(bundle->nativeSurface);
-        ANativeWindow_setBuffersGeometry(bundle->nativeSurface, 0, 0, bundle->format);
-        bundle->surface = eglCreateWindowSurface_p(g_EglDisplay, bundle->config, bundle->nativeSurface, NULL);
-        if (bundle->surface == EGL_NO_SURFACE) {
-            LOGE("eglCreateWindowSurface_p failed: 0x%04x, falling back to PBuffer", eglGetError_p());
+        int32_t w = ANativeWindow_getWidth(bundle->newNativeSurface);
+        int32_t h = ANativeWindow_getHeight(bundle->newNativeSurface);
+        if (w <= 0 || h <= 0) {
+            LOGW("gl_swap_surface: newNativeSurface has invalid dimensions (%d x %d), falling back to PBuffer", w, h);
+            bundle->nativeSurface = NULL;
+            bundle->newNativeSurface = NULL;
             bundle->surface = get_or_create_shared_pbuffer(bundle);
+        } else {
+            LOGI("gl_swap_surface: Switching to active ANativeWindow (%d x %d)", w, h);
+            bundle->nativeSurface = bundle->newNativeSurface;
+            bundle->newNativeSurface = NULL;
+            ANativeWindow_acquire(bundle->nativeSurface);
+            ANativeWindow_setBuffersGeometry(bundle->nativeSurface, 0, 0, bundle->format);
+            bundle->surface = eglCreateWindowSurface_p(g_EglDisplay, bundle->config, bundle->nativeSurface, NULL);
+            if (bundle->surface == EGL_NO_SURFACE) {
+                LOGE("eglCreateWindowSurface_p failed: 0x%04x, falling back to PBuffer", eglGetError_p());
+                bundle->surface = get_or_create_shared_pbuffer(bundle);
+            } else if (pojav_environ != NULL) {
+                pojav_environ->savedWidth = w;
+                pojav_environ->savedHeight = h;
+            }
         }
     } else {
         LOGI("gl_swap_surface: Attaching to 1x1 PBuffer (background=%d)", g_in_background);
@@ -214,18 +235,32 @@ void gl_make_current(gl_render_window_t* bundle) {
 void gl_swap_buffers() {
     if (currentBundle == NULL) return;
 
-    if (currentBundle->state == STATE_RENDERER_NEW_WINDOW) {
-        eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); //detach everything to destroy the old EGLSurface
-        gl_swap_surface(currentBundle);
-        eglMakeCurrent_p(g_EglDisplay, currentBundle->surface, currentBundle->surface, currentBundle->context);
-        currentBundle->state = STATE_RENDERER_ALIVE;
+    if (currentBundle->state == STATE_RENDERER_NEW_WINDOW ||
+        (!g_in_background && currentBundle->surface == g_shared_pbuffer && (currentBundle->newNativeSurface != NULL || (pojav_environ != NULL && pojav_environ->pojavWindow != NULL)))) {
+
+        // If in foreground and currently on PBuffer, and newNativeSurface is NULL but pojavWindow is valid, pick it up
+        if (!g_in_background && currentBundle->newNativeSurface == NULL && pojav_environ != NULL && pojav_environ->pojavWindow != NULL) {
+            int32_t pw = ANativeWindow_getWidth(pojav_environ->pojavWindow);
+            int32_t ph = ANativeWindow_getHeight(pojav_environ->pojavWindow);
+            if (pw > 0 && ph > 0) {
+                currentBundle->newNativeSurface = pojav_environ->pojavWindow;
+            }
+        }
+
+        if (currentBundle->state == STATE_RENDERER_NEW_WINDOW || currentBundle->newNativeSurface != NULL) {
+            currentBundle->state = STATE_RENDERER_ALIVE;
+            eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); //detach everything to destroy the old EGLSurface
+            gl_swap_surface(currentBundle);
+            eglMakeCurrent_p(g_EglDisplay, currentBundle->surface, currentBundle->surface, currentBundle->context);
+        }
     }
+
     if (currentBundle->surface != NULL && currentBundle->surface != EGL_NO_SURFACE) {
-        if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface)) {
-            EGLint err = eglGetError_p();
-            LOGW("eglSwapBuffers failed: 0x%04x", err);
-            // Catch any eglSwapBuffers failure to trigger emergency detach to PBuffer
-            if (currentBundle->surface != g_shared_pbuffer) {
+        if (currentBundle->surface != g_shared_pbuffer) {
+            if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface)) {
+                EGLint err = eglGetError_p();
+                LOGW("eglSwapBuffers failed: 0x%04x", err);
+                // Catch any eglSwapBuffers failure to trigger emergency detach to PBuffer
                 eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
                 currentBundle->newNativeSurface = NULL;
                 gl_swap_surface(currentBundle);

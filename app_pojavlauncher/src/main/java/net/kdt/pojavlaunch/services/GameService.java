@@ -29,6 +29,7 @@ public class GameService extends Service {
     private final LocalBinder mLocalBinder = new LocalBinder();
     private PowerManager.WakeLock mWakeLock;
     private WifiManager.WifiLock mWifiLock;
+    private WifiManager.MulticastLock mMulticastLock;
 
     @Override
     public void onCreate() {
@@ -36,14 +37,18 @@ public class GameService extends Service {
         acquireLocks();
     }
 
-    private void acquireLocks() {
+    private synchronized void acquireLocks() {
         try {
             PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (powerManager != null && mWakeLock == null) {
-                mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "amethyst:game_runtime_wakelock");
-                mWakeLock.setReferenceCounted(false);
-                mWakeLock.acquire();
-                Log.i("GameService", "Acquired PARTIAL_WAKE_LOCK for game runtime");
+            if (powerManager != null) {
+                if (mWakeLock == null) {
+                    mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "amethyst:game_runtime_wakelock");
+                    mWakeLock.setReferenceCounted(false);
+                }
+                if (!mWakeLock.isHeld()) {
+                    mWakeLock.acquire();
+                    Log.i("GameService", "Acquired PARTIAL_WAKE_LOCK for game runtime");
+                }
             }
         } catch (Exception e) {
             Log.e("GameService", "Failed to acquire WakeLock", e);
@@ -51,29 +56,43 @@ public class GameService extends Service {
 
         try {
             WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            if (wifiManager != null && mWifiLock == null) {
-                int wifiMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                        ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-                        : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
-                mWifiLock = wifiManager.createWifiLock(wifiMode, "amethyst:game_runtime_wifilock");
-                mWifiLock.setReferenceCounted(false);
-                mWifiLock.acquire();
-                Log.i("GameService", "Acquired WifiLock for game runtime");
+            if (wifiManager != null) {
+                if (mWifiLock == null) {
+                    int wifiMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                            ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                            : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+                    mWifiLock = wifiManager.createWifiLock(wifiMode, "amethyst:game_runtime_wifilock");
+                    mWifiLock.setReferenceCounted(false);
+                }
+                if (!mWifiLock.isHeld()) {
+                    mWifiLock.acquire();
+                    Log.i("GameService", "Acquired WifiLock for game runtime");
+                }
+
+                if (mMulticastLock == null) {
+                    mMulticastLock = wifiManager.createMulticastLock("amethyst:game_runtime_multicastlock");
+                    mMulticastLock.setReferenceCounted(false);
+                }
+                if (!mMulticastLock.isHeld()) {
+                    mMulticastLock.acquire();
+                    Log.i("GameService", "Acquired MulticastLock for multiplayer runtime");
+                }
             }
         } catch (Exception e) {
-            Log.e("GameService", "Failed to acquire WifiLock", e);
+            Log.e("GameService", "Failed to acquire WifiLock or MulticastLock", e);
         }
     }
 
-    private void releaseLocks() {
+    private synchronized void releaseLocks() {
         try {
             if (mWakeLock != null && mWakeLock.isHeld()) {
                 mWakeLock.release();
                 Log.i("GameService", "Released WakeLock");
             }
-            mWakeLock = null;
         } catch (Exception e) {
             Log.e("GameService", "Failed to release WakeLock", e);
+        } finally {
+            mWakeLock = null;
         }
 
         try {
@@ -81,9 +100,21 @@ public class GameService extends Service {
                 mWifiLock.release();
                 Log.i("GameService", "Released WifiLock");
             }
-            mWifiLock = null;
         } catch (Exception e) {
             Log.e("GameService", "Failed to release WifiLock", e);
+        } finally {
+            mWifiLock = null;
+        }
+
+        try {
+            if (mMulticastLock != null && mMulticastLock.isHeld()) {
+                mMulticastLock.release();
+                Log.i("GameService", "Released MulticastLock");
+            }
+        } catch (Exception e) {
+            Log.e("GameService", "Failed to release MulticastLock", e);
+        } finally {
+            mMulticastLock = null;
         }
     }
 

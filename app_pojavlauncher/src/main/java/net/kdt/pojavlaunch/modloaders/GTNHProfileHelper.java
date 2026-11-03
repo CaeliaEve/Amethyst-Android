@@ -143,12 +143,14 @@ public class GTNHProfileHelper {
 
         String current = existingArgs.trim();
 
-        // 清理过时与冲突参数（如旧版 ZGC、已废弃的 -Xverify:none、分层编译下失效的 CompileThreshold）
+        // 清理过时与冲突参数（如旧版 ZGC、ParallelGC、SerialGC、ShenandoahGC、CMS、已废弃的 -Xverify:none、-noverify、分层编译下失效的 CompileThreshold）
         if (recommendedArgs.contains("-XX:+UseG1GC")) {
-            current = current.replace("-XX:+UseZGC", "")
-                             .replace("-XX:+ZGenerational", "");
+            current = current.replaceAll("-XX:[+-]Use(ZGC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
+                             .replaceAll("-XX:[+-]ZGenerational\\b", "")
+                             .replaceAll("-XX:[+-]UseG1GC\\b", "");
         }
-        current = current.replace("-Xverify:none", "")
+        current = current.replaceAll("-Xverify:none\\b", "")
+                         .replaceAll("-noverify\\b", "")
                          .replaceAll("-XX:CompileThreshold=\\S+", "");
 
         // 提取推荐参数中的 -Xmx 与 -Xms

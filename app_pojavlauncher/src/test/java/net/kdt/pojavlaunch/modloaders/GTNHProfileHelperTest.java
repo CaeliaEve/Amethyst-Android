@@ -209,4 +209,23 @@ public class GTNHProfileHelperTest {
         Assert.assertTrue(merged.contains("-XX:+PerfDisableSharedMem"));
         Assert.assertTrue(merged.contains("-Djava.util.zip.ZipFile.useShortEntries=true"));
     }
+
+    @Test
+    public void testMergeJvmArgsCleansConflictingGcsAndNoverify() {
+        String existing = "-XX:+UseParallelGC -XX:+UseSerialGC -XX:+UseShenandoahGC -XX:-UseG1GC -noverify -XX:CompileThreshold=5000";
+        List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
+        String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
+
+        Assert.assertFalse(merged.contains("-XX:+UseParallelGC"));
+        Assert.assertFalse(merged.contains("-XX:+UseSerialGC"));
+        Assert.assertFalse(merged.contains("-XX:+UseShenandoahGC"));
+        Assert.assertFalse(merged.contains("-XX:-UseG1GC"));
+        Assert.assertFalse(merged.contains("-noverify"));
+        Assert.assertFalse(merged.contains("-XX:CompileThreshold"));
+        Assert.assertTrue(merged.contains("-XX:+UseG1GC"));
+
+        int firstIndex = merged.indexOf("-XX:+UseG1GC");
+        int lastIndex = merged.lastIndexOf("-XX:+UseG1GC");
+        Assert.assertEquals("Single -XX:+UseG1GC required", firstIndex, lastIndex);
+    }
 }
