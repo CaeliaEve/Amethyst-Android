@@ -630,6 +630,7 @@ public class JREUtils {
     public static native void releaseBridgeWindow();
     public static native void initializeHooks();
     public static native void setupExitMethod(Context context);
+    public static native void nativeSetBackgroundMode(boolean inBackground);
     // Obtain AWT screen pixels to render on Android SurfaceView
     public static native int[] renderAWTScreenFrame(/* Object canvas, int width, int height */);
     static {

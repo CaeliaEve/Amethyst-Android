@@ -111,16 +111,31 @@ public class GTNHProfileHelperTest {
         Assert.assertTrue(args.contains("-Dfile.encoding=UTF-8"));
         Assert.assertTrue(args.contains("-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader"));
         Assert.assertTrue(args.contains("--enable-native-access=ALL-UNNAMED"));
-        Assert.assertTrue(args.contains("-XX:+UnlockExperimentalVMOptions"));
-        Assert.assertTrue(args.contains("-XX:+UseCompactObjectHeaders"));
-        Assert.assertTrue(args.contains("-XX:+UseZGC"));
-        Assert.assertFalse(args.contains("-XX:+ZGenerational"));
         Assert.assertTrue(args.contains("-Xms4096M"));
         Assert.assertTrue(args.contains("-Xmx6144M"));
+        Assert.assertTrue(args.contains("-XX:+UseG1GC"));
+        Assert.assertTrue(args.contains("-XX:+UnlockExperimentalVMOptions"));
+        Assert.assertTrue(args.contains("-XX:+UseCompactObjectHeaders"));
+        Assert.assertTrue(args.contains("-XX:+ParallelRefProcEnabled"));
+        Assert.assertTrue(args.contains("-XX:MaxGCPauseMillis=20"));
+        Assert.assertTrue(args.contains("-XX:G1ReservePercent=15"));
+        Assert.assertTrue(args.contains("-XX:InitiatingHeapOccupancyPercent=45"));
         Assert.assertTrue(args.contains("-XX:+TieredCompilation"));
-        Assert.assertTrue(args.contains("-XX:CICompilerCount=4"));
-        Assert.assertTrue(args.contains("-XX:CompileThreshold=1200"));
-        Assert.assertTrue(args.contains("-Xverify:none"));
+        Assert.assertTrue(args.contains("-XX:+UseDynamicNumberOfCompilerThreads"));
+        Assert.assertTrue(args.contains("-XX:CICompilerCount=6"));
+        Assert.assertTrue(args.contains("-XX:Tier3InvocationThreshold=100"));
+        Assert.assertTrue(args.contains("-XX:Tier3CompileThreshold=1000"));
+        Assert.assertTrue(args.contains("-XX:Tier4InvocationThreshold=4000"));
+        Assert.assertTrue(args.contains("-XX:+SegmentedCodeCache"));
+        Assert.assertTrue(args.contains("-XX:ReservedCodeCacheSize=256M"));
+        Assert.assertTrue(args.contains("-XX:+PerfDisableSharedMem"));
+        Assert.assertTrue(args.contains("-Djava.util.zip.ZipFile.useShortEntries=true"));
+
+        // Verify deprecated or conflicting options are removed
+        Assert.assertFalse(args.contains("-XX:+UseZGC"));
+        Assert.assertFalse(args.contains("-XX:+ZGenerational"));
+        Assert.assertFalse(args.contains("-XX:CompileThreshold=1200"));
+        Assert.assertFalse(args.contains("-Xverify:none"));
     }
 
     @Test
@@ -155,7 +170,7 @@ public class GTNHProfileHelperTest {
 
     @Test
     public void testMergeJvmArgsReplacesXmxAndXms() {
-        String existing = "-Xms1024M -Xmx2048M -Dcustom.flag=hello";
+        String existing = "-Xms1024M -Xmx2048M -Dcustom.flag=hello -XX:+UseZGC -Xverify:none";
         List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
         String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
 
@@ -165,12 +180,14 @@ public class GTNHProfileHelperTest {
         Assert.assertFalse(merged.contains("-Xmx2048M"));
         Assert.assertTrue(merged.contains("-Dcustom.flag=hello"));
         Assert.assertTrue(merged.contains("-XX:+UseCompactObjectHeaders"));
-        Assert.assertTrue(merged.contains("-XX:+UseZGC"));
+        Assert.assertTrue(merged.contains("-XX:+UseG1GC"));
+        Assert.assertFalse(merged.contains("-XX:+UseZGC"));
+        Assert.assertFalse(merged.contains("-Xverify:none"));
     }
 
     @Test
     public void testMergeJvmArgsPrefixDeduplication() {
-        String existing = "-Dfile.encoding=GBK -XX:CICompilerCount=8 -XX:+UseZGC";
+        String existing = "-Dfile.encoding=GBK -XX:CICompilerCount=8 -XX:+UseG1GC";
         List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
         String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
 
@@ -178,16 +195,18 @@ public class GTNHProfileHelperTest {
         Assert.assertTrue(merged.contains("-Dfile.encoding=GBK"));
         Assert.assertFalse(merged.contains("-Dfile.encoding=UTF-8"));
         Assert.assertTrue(merged.contains("-XX:CICompilerCount=8"));
-        Assert.assertFalse(merged.contains("-XX:CICompilerCount=4"));
+        Assert.assertFalse(merged.contains("-XX:CICompilerCount=6"));
 
-        // -XX:+UseZGC should only appear once
-        int firstIndex = merged.indexOf("-XX:+UseZGC");
-        int lastIndex = merged.lastIndexOf("-XX:+UseZGC");
-        Assert.assertEquals("Duplicate -XX:+UseZGC detected", firstIndex, lastIndex);
+        // -XX:+UseG1GC should only appear once
+        int firstIndex = merged.indexOf("-XX:+UseG1GC");
+        int lastIndex = merged.lastIndexOf("-XX:+UseG1GC");
+        Assert.assertEquals("Duplicate -XX:+UseG1GC detected", firstIndex, lastIndex);
 
         // New flags should still be added
         Assert.assertTrue(merged.contains("-XX:+UseCompactObjectHeaders"));
         Assert.assertTrue(merged.contains("-Xms4096M"));
         Assert.assertTrue(merged.contains("-Xmx6144M"));
+        Assert.assertTrue(merged.contains("-XX:+PerfDisableSharedMem"));
+        Assert.assertTrue(merged.contains("-Djava.util.zip.ZipFile.useShortEntries=true"));
     }
 }

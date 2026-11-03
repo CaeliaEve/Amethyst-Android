@@ -106,15 +106,25 @@ public class GTNHProfileHelper {
                 "-Dfile.encoding=UTF-8",
                 "-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader",
                 "--enable-native-access=ALL-UNNAMED",
-                "-XX:+UnlockExperimentalVMOptions",
-                "-XX:+UseCompactObjectHeaders",
-                "-XX:+UseZGC",
                 "-Xms" + xms + "M",
                 "-Xmx" + maxMemoryMb + "M",
+                "-XX:+UseG1GC",
+                "-XX:+UnlockExperimentalVMOptions",
+                "-XX:+UseCompactObjectHeaders",
+                "-XX:+ParallelRefProcEnabled",
+                "-XX:MaxGCPauseMillis=20",
+                "-XX:G1ReservePercent=15",
+                "-XX:InitiatingHeapOccupancyPercent=45",
                 "-XX:+TieredCompilation",
-                "-XX:CICompilerCount=4",
-                "-XX:CompileThreshold=1200",
-                "-Xverify:none"
+                "-XX:+UseDynamicNumberOfCompilerThreads",
+                "-XX:CICompilerCount=6",
+                "-XX:Tier3InvocationThreshold=100",
+                "-XX:Tier3CompileThreshold=1000",
+                "-XX:Tier4InvocationThreshold=4000",
+                "-XX:+SegmentedCodeCache",
+                "-XX:ReservedCodeCacheSize=256M",
+                "-XX:+PerfDisableSharedMem",
+                "-Djava.util.zip.ZipFile.useShortEntries=true"
         ));
     }
 
@@ -132,6 +142,14 @@ public class GTNHProfileHelper {
         }
 
         String current = existingArgs.trim();
+
+        // 清理过时与冲突参数（如旧版 ZGC、已废弃的 -Xverify:none、分层编译下失效的 CompileThreshold）
+        if (recommendedArgs.contains("-XX:+UseG1GC")) {
+            current = current.replace("-XX:+UseZGC", "")
+                             .replace("-XX:+ZGenerational", "");
+        }
+        current = current.replace("-Xverify:none", "")
+                         .replaceAll("-XX:CompileThreshold=\\S+", "");
 
         // 提取推荐参数中的 -Xmx 与 -Xms
         String recXmx = null;

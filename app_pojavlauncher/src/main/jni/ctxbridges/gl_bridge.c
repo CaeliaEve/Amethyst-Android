@@ -103,48 +103,80 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
     return bundle;
 }
 
-void gl_swap_surface(gl_render_window_t* bundle) {
-    /*
-     * In some cases (see MinecraftGLSurface.start(), android kills the surface automatically for
-     * us, if we try to release/destroy it, we SIGSEGV. Check if we are -19x-19 or some other
-     * invalid value and skip the release because Android decided to handle releasing it for us.
-     * This goes against every piece of documentation I have ever seen but who actually reads those?
-     *
-     * Some drivers take forever to properly destroy the surface, they do it part at a time or
-     * some other garbage while SIGSEGVing us if we try releasing while they're in the middle of
-     * turning the surface dead. This makes the width and height make it look valid when it actually
-     * isn't so we wait for them and hope there is no race condition of both us and Android trying
-     * to release the surface. This seems driver dependent as AVD and Waydroid do not need 0.75s
-     * to set the bloody height and width to their proper values. They just do it, instantly.
-     */
-    usleep(750000); // An overkill amount of time to wait for a surface to finish dying
-    int32_t nativeWindowWidth = ANativeWindow_getWidth(pojav_environ->pojavWindow);
-    int32_t nativeWindowHeight = ANativeWindow_getHeight(pojav_environ->pojavWindow);
-    if ((nativeWindowWidth > 0) || (nativeWindowHeight > 0)) {
-        LOGI("Native surface dimensions (%d x %d)\n",
-             nativeWindowWidth, nativeWindowHeight);
-        if (bundle->nativeSurface != NULL) {
-            ANativeWindow_release(bundle->nativeSurface);
-        }
-        if (bundle->surface != NULL) eglDestroySurface_p(g_EglDisplay, bundle->surface);
-    } else {
-        LOGW("Native surface dimensions (%d x %d) are invalid! Assuming given nativeSurface is bad.\n",
-             nativeWindowWidth, nativeWindowHeight);
+static volatile bool g_in_background = false;
+static EGLSurface g_shared_pbuffer = EGL_NO_SURFACE;
+
+static EGLSurface get_or_create_shared_pbuffer(gl_render_window_t* bundle) {
+    if (g_shared_pbuffer != EGL_NO_SURFACE) {
+        return g_shared_pbuffer;
     }
-    if(bundle->newNativeSurface != NULL) {
-        LOGI("Switching to new native surface");
+    const EGLint pbuffer_attrs[] = {
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
+        EGL_NONE
+    };
+    g_shared_pbuffer = eglCreatePbufferSurface_p(g_EglDisplay, bundle->config, pbuffer_attrs);
+    if (g_shared_pbuffer == EGL_NO_SURFACE) {
+        LOGE("Failed to create shared 1x1 PBuffer surface: 0x%04x", eglGetError_p());
+    } else {
+        LOGI("Created shared 1x1 headless PBuffer surface: %p", g_shared_pbuffer);
+    }
+    return g_shared_pbuffer;
+}
+
+JNIEXPORT void JNICALL
+Java_net_kdt_pojavlaunch_utils_JREUtils_nativeSetBackgroundMode(JNIEnv* env, jclass clazz, jboolean inBackground) {
+    LOGI("nativeSetBackgroundMode called: %d", inBackground);
+    g_in_background = inBackground ? true : false;
+    if (pojav_environ != NULL && pojav_environ->mainWindowBundle != NULL) {
+        if (inBackground) {
+            pojav_environ->mainWindowBundle->newNativeSurface = NULL;
+            pojav_environ->mainWindowBundle->state = STATE_RENDERER_NEW_WINDOW;
+        } else {
+            if (pojav_environ->pojavWindow != NULL) {
+                pojav_environ->mainWindowBundle->newNativeSurface = pojav_environ->pojavWindow;
+                pojav_environ->mainWindowBundle->state = STATE_RENDERER_NEW_WINDOW;
+            }
+        }
+    }
+}
+
+void gl_swap_surface(gl_render_window_t* bundle) {
+    if (bundle == NULL) return;
+
+    // Safely destroy old window surface (retaining shared PBuffer)
+    if (bundle->surface != EGL_NO_SURFACE && bundle->surface != NULL) {
+        if (bundle->surface == g_shared_pbuffer) {
+            bundle->surface = EGL_NO_SURFACE;
+        } else {
+            LOGI("gl_swap_surface: Destroying old window EGL surface");
+            eglDestroySurface_p(g_EglDisplay, bundle->surface);
+            bundle->surface = EGL_NO_SURFACE;
+        }
+    }
+    if (bundle->nativeSurface != NULL) {
+        ANativeWindow_release(bundle->nativeSurface);
+        bundle->nativeSurface = NULL;
+    }
+
+    // Attach to active ANativeWindow (foreground) or 1x1 PBuffer (background)
+    if (!g_in_background && bundle->newNativeSurface != NULL) {
+        LOGI("gl_swap_surface: Switching to active ANativeWindow");
         bundle->nativeSurface = bundle->newNativeSurface;
         bundle->newNativeSurface = NULL;
         ANativeWindow_acquire(bundle->nativeSurface);
         ANativeWindow_setBuffersGeometry(bundle->nativeSurface, 0, 0, bundle->format);
         bundle->surface = eglCreateWindowSurface_p(g_EglDisplay, bundle->config, bundle->nativeSurface, NULL);
-    }else{
-        LOGI("No new native surface, switching to 1x1 pbuffer");
+        if (bundle->surface == EGL_NO_SURFACE) {
+            LOGE("eglCreateWindowSurface_p failed: 0x%04x, falling back to PBuffer", eglGetError_p());
+            bundle->surface = get_or_create_shared_pbuffer(bundle);
+        }
+    } else {
+        LOGI("gl_swap_surface: Attaching to 1x1 PBuffer (background=%d)", g_in_background);
         bundle->nativeSurface = NULL;
-        const EGLint pbuffer_attrs[] = {EGL_WIDTH, 1 , EGL_HEIGHT, 1, EGL_NONE};
-        bundle->surface = eglCreatePbufferSurface_p(g_EglDisplay, bundle->config, pbuffer_attrs);
+        bundle->newNativeSurface = NULL;
+        bundle->surface = get_or_create_shared_pbuffer(bundle);
     }
-    //eglMakeCurrent_p(g_EglDisplay, bundle->surface, bundle->surface, bundle->context);
 }
 
 void gl_make_current(gl_render_window_t* bundle) {
@@ -180,21 +212,34 @@ void gl_make_current(gl_render_window_t* bundle) {
 }
 
 void gl_swap_buffers() {
-    if(currentBundle->state == STATE_RENDERER_NEW_WINDOW) {
+    if (currentBundle == NULL) return;
+
+    if (currentBundle->state == STATE_RENDERER_NEW_WINDOW) {
         eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT); //detach everything to destroy the old EGLSurface
         gl_swap_surface(currentBundle);
         eglMakeCurrent_p(g_EglDisplay, currentBundle->surface, currentBundle->surface, currentBundle->context);
         currentBundle->state = STATE_RENDERER_ALIVE;
     }
-    if(currentBundle->surface != NULL)
-        if(!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface) && eglGetError_p() == EGL_BAD_SURFACE) {
-            eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-            currentBundle->newNativeSurface = NULL;
-            gl_swap_surface(currentBundle);
-            eglMakeCurrent_p(g_EglDisplay, currentBundle->surface, currentBundle->surface, currentBundle->context);
-            LOGI("The window has died, awaiting window change");
+    if (currentBundle->surface != NULL && currentBundle->surface != EGL_NO_SURFACE) {
+        if (!eglSwapBuffers_p(g_EglDisplay, currentBundle->surface)) {
+            EGLint err = eglGetError_p();
+            LOGW("eglSwapBuffers failed: 0x%04x", err);
+            // Catch any eglSwapBuffers failure to trigger emergency detach to PBuffer
+            if (currentBundle->surface != g_shared_pbuffer) {
+                eglMakeCurrent_p(g_EglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+                currentBundle->newNativeSurface = NULL;
+                gl_swap_surface(currentBundle);
+                eglMakeCurrent_p(g_EglDisplay, currentBundle->surface, currentBundle->surface, currentBundle->context);
+                currentBundle->state = STATE_RENDERER_ALIVE;
+                LOGI("Window died or error, emergency detached to shared PBuffer");
+            }
+        }
     }
 
+    // In background mode throttle by usleep(50000) (50ms / 20 FPS, aligned with Minecraft 20 TPS)
+    if (g_in_background) {
+        usleep(50000);
+    }
 }
 
 void gl_setup_window() {
