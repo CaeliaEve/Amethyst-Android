@@ -271,10 +271,8 @@ void gl_swap_buffers() {
         }
     }
 
-    // In background mode throttle by usleep(50000) (50ms / 20 FPS, aligned with Minecraft 20 TPS)
-    if (g_in_background) {
-        usleep(50000);
-    }
+    // Background throttling removed to prevent artificial 20 FPS locking
+    (void)g_in_background;
 }
 
 void gl_setup_window() {

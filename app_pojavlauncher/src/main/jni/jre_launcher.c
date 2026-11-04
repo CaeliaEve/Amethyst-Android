@@ -156,7 +156,7 @@ static void sigsys_setup() {
 }
 
 static jint launchJVM(int margc, char** margv) {
-    bigcore_set_affinity();
+    // Let Linux kernel CFS freely schedule threads across all 10 cores without artificial affinity restrictions
    void* libjli = dlopen("libjli.so", RTLD_LAZY | RTLD_GLOBAL);
 
    // Unset all signal handlers to create a good slate for JVM signal detection.
