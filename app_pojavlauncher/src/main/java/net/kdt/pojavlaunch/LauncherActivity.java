@@ -210,9 +210,10 @@ public class LauncherActivity extends BaseActivity {
         }
         if (GTNHProfileHelper.isGTNHInstance(gameDir)) {
             try {
-                // 1. 自动清洗 lwjgl3ify.cfg 与 BetterLoadingScreen 配置
+                // 1. 自动清洗 lwjgl3ify.cfg、BetterLoadingScreen 以及 FpsReducer 配置
                 GTNHProfileHelper.sanitizeLwjgl3ifyConfig(gameDir);
                 GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
+                GTNHProfileHelper.sanitizeFpsReducerConfig(gameDir);
 
                 long ramMb = LauncherPreferences.PREF_RAM_ALLOCATION > 0 ? LauncherPreferences.PREF_RAM_ALLOCATION : 6144;
                 String jre25Name = MultiRTUtils.getExactJreName(25);

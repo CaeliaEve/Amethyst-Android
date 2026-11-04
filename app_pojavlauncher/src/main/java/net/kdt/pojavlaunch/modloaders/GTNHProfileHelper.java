@@ -155,6 +155,63 @@ public class GTNHProfileHelper {
     }
 
     /**
+     * 自动清洗与修正 FpsReducer 配置并禁用模组 jar，防止在移动端因无触控/键鼠活跃事件被强制限制为 10 FPS
+     */
+    public static void sanitizeFpsReducerConfig(File gameDir) throws IOException {
+        if (gameDir == null) return;
+        File configDir = new File(gameDir, "config/FpsReducer");
+        if (!configDir.exists()) configDir.mkdirs();
+        File cfg = new File(configDir, "FpsReducer.cfg");
+        if (!cfg.exists()) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(cfg))) {
+                writer.write("common {\n");
+                writer.write("    B:enableFpsReducer=false\n");
+                writer.write("}\n");
+            }
+        } else {
+            List<String> lines = new ArrayList<>();
+            boolean foundEnable = false;
+            try (BufferedReader reader = new BufferedReader(new FileReader(cfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.trim().startsWith("B:enableFpsReducer=")) {
+                        lines.add("    B:enableFpsReducer=false");
+                        foundEnable = true;
+                    } else {
+                        lines.add(line);
+                    }
+                }
+            }
+            if (!foundEnable) {
+                lines.add("common {");
+                lines.add("    B:enableFpsReducer=false");
+                lines.add("}");
+            }
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(cfg))) {
+                for (String l : lines) {
+                    writer.write(l);
+                    writer.newLine();
+                }
+            }
+        }
+
+        // 同时禁用 mods 目录下的 FpsReducer jar 包
+        File modsDir = new File(gameDir, "mods");
+        if (modsDir.exists() && modsDir.isDirectory()) {
+            File[] files = modsDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    String name = file.getName().toLowerCase();
+                    if (name.contains("fpsreducer") && name.endsWith(".jar")) {
+                        File disabled = new File(modsDir, file.getName() + ".disabled");
+                        file.renameTo(disabled);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * 获取专为玄戒 O1 / 8 Gen 2 调优的 Java 25 GTNH 黄金参数
      */
     public static List<String> getRecommendedJvmArgs(long maxMemoryMb) {
@@ -163,25 +220,16 @@ public class GTNHProfileHelper {
                 "-Dfile.encoding=UTF-8",
                 "-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader",
                 "--enable-native-access=ALL-UNNAMED",
-                "-Xms" + xms + "M",
-                "-Xmx" + maxMemoryMb + "M",
-                "-XX:+UseG1GC",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseCompactObjectHeaders",
-                "-XX:+ParallelRefProcEnabled",
-                "-XX:MaxGCPauseMillis=20",
-                "-XX:G1ReservePercent=15",
-                "-XX:InitiatingHeapOccupancyPercent=45",
+                "-XX:+UseZGC",
+                "-XX:+ZGenerational",
+                "-Xms" + xms + "M",
+                "-Xmx" + maxMemoryMb + "M",
                 "-XX:+TieredCompilation",
-                "-XX:+UseDynamicNumberOfCompilerThreads",
-                "-XX:CICompilerCount=6",
-                "-XX:Tier3InvocationThreshold=100",
-                "-XX:Tier3CompileThreshold=1000",
-                "-XX:Tier4InvocationThreshold=4000",
-                "-XX:+SegmentedCodeCache",
-                "-XX:ReservedCodeCacheSize=256M",
-                "-XX:+PerfDisableSharedMem",
-                "-Djava.util.zip.ZipFile.useShortEntries=true"
+                "-XX:CICompilerCount=4",
+                "-XX:CompileThreshold=1200",
+                "-Xverify:none"
         ));
     }
 
@@ -200,15 +248,12 @@ public class GTNHProfileHelper {
 
         String current = existingArgs.trim();
 
-        // 清理过时与冲突参数（如旧版 ZGC、ParallelGC、SerialGC、ShenandoahGC、CMS、已废弃的 -Xverify:none、-noverify、分层编译下失效的 CompileThreshold）
-        if (recommendedArgs.contains("-XX:+UseG1GC")) {
-            current = current.replaceAll("-XX:[+-]Use(ZGC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
-                             .replaceAll("-XX:[+-]ZGenerational\\b", "")
-                             .replaceAll("-XX:[+-]UseG1GC\\b", "");
+        // 清理与 ZGC 冲突的其他 GC 参数（如 G1GC、ParallelGC、SerialGC、ShenandoahGC、CMS 等）
+        if (recommendedArgs.contains("-XX:+UseZGC")) {
+            current = current.replaceAll("-XX:[+-]Use(G1GC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
+                             .replaceAll("-XX:-UseZGC\\b", "")
+                             .replaceAll("-XX:-ZGenerational\\b", "");
         }
-        current = current.replaceAll("-Xverify:none\\b", "")
-                         .replaceAll("-noverify\\b", "")
-                         .replaceAll("-XX:CompileThreshold=\\S+", "");
 
         // 提取推荐参数中的 -Xmx 与 -Xms
         String recXmx = null;
