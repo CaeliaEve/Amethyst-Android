@@ -231,10 +231,10 @@ public class CurseforgeApi implements ModpackApi{
             ZipUtils.zipExtract(modpackZipFile, overridesDir, instanceDestination);
 
             // Extract bundled offline libraries and versions to root .minecraft if present
-            ZipUtils.zipExtract(modpackZipFile, "libraries/", new File(Tools.DIR_GAME_HOME, "libraries"));
-            ZipUtils.zipExtract(modpackZipFile, ".minecraft/libraries/", new File(Tools.DIR_GAME_HOME, "libraries"));
-            ZipUtils.zipExtract(modpackZipFile, "versions/", new File(Tools.DIR_GAME_HOME, "versions"));
-            ZipUtils.zipExtract(modpackZipFile, ".minecraft/versions/", new File(Tools.DIR_GAME_HOME, "versions"));
+            ZipUtils.zipExtract(modpackZipFile, "libraries/", new File(Tools.DIR_GAME_NEW, "libraries"));
+            ZipUtils.zipExtract(modpackZipFile, ".minecraft/libraries/", new File(Tools.DIR_GAME_NEW, "libraries"));
+            ZipUtils.zipExtract(modpackZipFile, "versions/", new File(Tools.DIR_GAME_NEW, "versions"));
+            ZipUtils.zipExtract(modpackZipFile, ".minecraft/versions/", new File(Tools.DIR_GAME_NEW, "versions"));
 
             return createInfo(curseManifest.minecraft);
         }
