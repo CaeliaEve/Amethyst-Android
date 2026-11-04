@@ -215,6 +215,10 @@ public class LauncherActivity extends BaseActivity {
                 GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
                 GTNHProfileHelper.sanitizeFpsReducerConfig(gameDir);
 
+                // 解除 VSync 强制锁定，允许高刷跑满 200+ FPS
+                LauncherPreferences.PREF_FORCE_VSYNC = false;
+                LauncherPreferences.DEFAULT_PREF.edit().putBoolean("force_vsync", false).apply();
+
                 long ramMb = LauncherPreferences.PREF_RAM_ALLOCATION > 0 ? LauncherPreferences.PREF_RAM_ALLOCATION : 6144;
                 String jre25Name = MultiRTUtils.getExactJreName(25);
                 if (jre25Name != null) {

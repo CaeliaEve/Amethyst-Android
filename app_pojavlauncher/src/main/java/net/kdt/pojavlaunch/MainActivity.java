@@ -444,14 +444,16 @@ public class MainActivity extends BaseActivity implements ControlButtonMenuListe
                     throw new RuntimeException(getString(R.string.error_vanilla_json_corrupt));
                 }
                 // Something went wrong if this is somehow not the case anymore
-                if (!Objects.equals(vanillaJson.assets, vanillaJson.assetIndex.id))
+                if (vanillaJson.assets != null && vanillaJson.assetIndex != null && !Objects.equals(vanillaJson.assets, vanillaJson.assetIndex.id)) {
                     Tools.showErrorRemote(new RuntimeException(getString(R.string.error_vanilla_json_corrupt)));
-                assetVersion = vanillaJson.assets;
+                }
+                assetVersion = vanillaJson.assets != null ? vanillaJson.assets : (vanillaJson.assetIndex != null ? vanillaJson.assetIndex.id : "legacy");
             } else {
                 // Else assume we are vanilla
-                if (!Objects.equals(version.assets, version.assetIndex.id))
+                if (version.assets != null && version.assetIndex != null && !Objects.equals(version.assets, version.assetIndex.id)) {
                     Tools.showErrorRemote(new RuntimeException(getString(R.string.error_vanilla_json_corrupt)));
-                assetVersion = version.assets;
+                }
+                assetVersion = version.assets != null ? version.assets : (version.assetIndex != null ? version.assetIndex.id : "legacy");
             }
        } catch (RuntimeException ignored){
             assetVersion = "legacy";
