@@ -69,6 +69,38 @@ public class GTNHProfileHelperTest {
         String result = new String(Files.readAllBytes(cfg.toPath()));
         Assert.assertTrue(result.contains("B:sharedContext=false"));
         Assert.assertTrue(result.contains("B:hidpiRendering=true"));
+        Assert.assertTrue(result.contains("B:linuxCreateAppDesktopEntry=false"));
+    }
+
+    @Test
+    public void testSanitizeBetterLoadingScreenConfig() throws IOException {
+        File gameDir = tempFolder.newFolder("gtnhBLSGame");
+        File cfgDir = new File(gameDir, "config/Betterloadingscreen");
+        cfgDir.mkdirs();
+        File cfg = new File(cfgDir, "betterloadingscreen.cfg");
+
+        String badConfig = "general {\n    B:threadedRendering=true\n}\n";
+        try (FileWriter writer = new FileWriter(cfg)) {
+            writer.write(badConfig);
+        }
+
+        GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
+
+        String result = new String(Files.readAllBytes(cfg.toPath()));
+        Assert.assertTrue(result.contains("B:threadedRendering=false"));
+    }
+
+    @Test
+    public void testSanitizeBetterLoadingScreenConfigCreatesIfNotExists() throws IOException {
+        File gameDir = tempFolder.newFolder("gtnhBLSNewGame");
+        File cfg = new File(gameDir, "config/Betterloadingscreen/betterloadingscreen.cfg");
+        Assert.assertFalse(cfg.exists());
+
+        GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
+
+        Assert.assertTrue(cfg.exists());
+        String result = new String(Files.readAllBytes(cfg.toPath()));
+        Assert.assertTrue(result.contains("B:threadedRendering=false"));
     }
 
     @Test

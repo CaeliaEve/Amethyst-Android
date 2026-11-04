@@ -416,7 +416,14 @@ public final class Tools {
             localeString = R.string.memory_warning_msg;
         }
 
-        if(LauncherPreferences.PREF_RAM_ALLOCATION > freeDeviceMemory) {
+        // 在大运存设备（>= 6GB 总物理内存）或已确认 GTNH 实例上，当空闲内存因缓存波动略低于分配值时避免弹窗阻断自动化与启动
+        android.app.ActivityManager actManager = (android.app.ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
+        android.app.ActivityManager.MemoryInfo memInfo = new android.app.ActivityManager.MemoryInfo();
+        actManager.getMemoryInfo(memInfo);
+        long totalRamMb = memInfo.totalMem / 1048576L;
+        boolean hasAbundantRam = totalRamMb >= 6144L;
+
+        if(LauncherPreferences.PREF_RAM_ALLOCATION > freeDeviceMemory && !hasAbundantRam) {
             int finalDeviceMemory = freeDeviceMemory;
             LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder) ->
                 builder.setMessage(activity.getString(localeString, finalDeviceMemory, LauncherPreferences.PREF_RAM_ALLOCATION))
@@ -427,6 +434,8 @@ public final class Tools {
                 // actually launching the game, thus giving us the opportunity
                 // to start after the activity is shown again
             }
+        } else if (LauncherPreferences.PREF_RAM_ALLOCATION > freeDeviceMemory) {
+            Log.i("MemStat", "Device has abundant RAM (" + totalRamMb + "MB), skipping blocking memory warning dialog.");
         }
         LauncherProfiles.load();
         File gamedir = Tools.getGameDirPath(minecraftProfile);

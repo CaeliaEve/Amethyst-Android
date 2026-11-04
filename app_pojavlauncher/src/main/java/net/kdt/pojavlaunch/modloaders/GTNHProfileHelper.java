@@ -55,6 +55,9 @@ public class GTNHProfileHelper {
                 writer.write("window {\n");
                 writer.write("    B:hidpiRendering=true\n");
                 writer.write("}\n");
+                writer.write("linux {\n");
+                writer.write("    B:linuxCreateAppDesktopEntry=false\n");
+                writer.write("}\n");
             }
             return;
         }
@@ -62,6 +65,7 @@ public class GTNHProfileHelper {
         List<String> lines = new ArrayList<>();
         boolean foundShared = false;
         boolean foundHiDpi = false;
+        boolean foundLinuxDesktop = false;
 
         try (BufferedReader reader = new BufferedReader(new FileReader(cfg))) {
             String line;
@@ -72,6 +76,9 @@ public class GTNHProfileHelper {
                 } else if (line.trim().startsWith("B:hidpiRendering=")) {
                     lines.add("    B:hidpiRendering=true");
                     foundHiDpi = true;
+                } else if (line.trim().startsWith("B:linuxCreateAppDesktopEntry=")) {
+                    lines.add("    B:linuxCreateAppDesktopEntry=false");
+                    foundLinuxDesktop = true;
                 } else {
                     lines.add(line);
                 }
@@ -86,6 +93,56 @@ public class GTNHProfileHelper {
         if (!foundHiDpi) {
             lines.add("window {");
             lines.add("    B:hidpiRendering=true");
+            lines.add("}");
+        }
+        if (!foundLinuxDesktop) {
+            lines.add("linux {");
+            lines.add("    B:linuxCreateAppDesktopEntry=false");
+            lines.add("}");
+        }
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(cfg))) {
+            for (String l : lines) {
+                writer.write(l);
+                writer.newLine();
+            }
+        }
+    }
+
+    /**
+     * 自动清洗与修正 betterloadingscreen.cfg，防止在移动端因共享 GL 上下文多线程渲染崩溃
+     */
+    public static void sanitizeBetterLoadingScreenConfig(File gameDir) throws IOException {
+        File configDir = new File(gameDir, "config/Betterloadingscreen");
+        if (!configDir.exists()) configDir.mkdirs();
+        File cfg = new File(configDir, "betterloadingscreen.cfg");
+        if (!cfg.exists()) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(cfg))) {
+                writer.write("general {\n");
+                writer.write("    B:threadedRendering=false\n");
+                writer.write("}\n");
+            }
+            return;
+        }
+
+        List<String> lines = new ArrayList<>();
+        boolean foundThreaded = false;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(cfg))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().startsWith("B:threadedRendering=")) {
+                    lines.add("    B:threadedRendering=false");
+                    foundThreaded = true;
+                } else {
+                    lines.add(line);
+                }
+            }
+        }
+
+        if (!foundThreaded) {
+            lines.add("general {");
+            lines.add("    B:threadedRendering=false");
             lines.add("}");
         }
 
