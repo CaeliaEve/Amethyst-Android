@@ -219,7 +219,7 @@ public class LauncherActivity extends BaseActivity {
                 String jre25Name = MultiRTUtils.getExactJreName(25);
                 if (jre25Name != null) {
                     prof.javaDir = Tools.LAUNCHERPROFILES_RTPREFIX + jre25Name;
-                    // 只有在确定是 JRE 25 时才注入 JDK 25 的 Compact Object Headers 与 ZGC 参数
+                    // 只有在确定是 JRE 25 时才注入 JDK 25 的 Compact Object Headers 与 G1GC 调优参数
                     List<String> gtnhArgs = GTNHProfileHelper.getRecommendedJvmArgs(ramMb);
                     prof.javaArgs = GTNHProfileHelper.mergeJvmArgs(prof.javaArgs, gtnhArgs);
                     LauncherProfiles.mainProfileJson.profiles.put(selectedProfile, prof);

@@ -222,8 +222,10 @@ public class GTNHProfileHelper {
                 "--enable-native-access=ALL-UNNAMED",
                 "-XX:+UnlockExperimentalVMOptions",
                 "-XX:+UseCompactObjectHeaders",
-                "-XX:+UseZGC",
-                "-XX:+ZGenerational",
+                "-XX:+UseG1GC",
+                "-XX:+ParallelRefProcEnabled",
+                "-XX:G1ReservePercent=15",
+                "-XX:InitiatingHeapOccupancyPercent=45",
                 "-Xms" + xms + "M",
                 "-Xmx" + maxMemoryMb + "M",
                 "-XX:+TieredCompilation",
@@ -248,11 +250,15 @@ public class GTNHProfileHelper {
 
         String current = existingArgs.trim();
 
-        // 清理与 ZGC 冲突的其他 GC 参数（如 G1GC、ParallelGC、SerialGC、ShenandoahGC、CMS 等）
-        if (recommendedArgs.contains("-XX:+UseZGC")) {
-            current = current.replaceAll("-XX:[+-]Use(G1GC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
-                             .replaceAll("-XX:-UseZGC\\b", "")
-                             .replaceAll("-XX:-ZGenerational\\b", "");
+        // 清理与 G1GC 冲突的其他 GC 参数（如 ZGC、ParallelGC、SerialGC、ShenandoahGC、CMS 等）以及致帧数暴跌的激进参数
+        if (recommendedArgs.contains("-XX:+UseG1GC")) {
+            current = current.replaceAll("-XX:[+-]Use(ZGC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
+                             .replaceAll("-XX:[+-]ZGenerational\\b", "")
+                             .replaceAll("-XX:-UseG1GC\\b", "")
+                             .replaceAll("-XX:MaxGCPauseMillis=\\d+\\b", "")
+                             .replaceAll("-XX:Tier4InvocationThreshold=\\d+\\b", "")
+                             .replaceAll("-XX:Tier3InvocationThreshold=\\d+\\b", "")
+                             .replaceAll("-XX:Tier3CompileThreshold=\\d+\\b", "");
         }
 
         // 提取推荐参数中的 -Xmx 与 -Xms
