@@ -210,10 +210,12 @@ public class LauncherActivity extends BaseActivity {
         }
         if (GTNHProfileHelper.isGTNHInstance(gameDir)) {
             try {
-                // 1. 自动清洗 lwjgl3ify.cfg、BetterLoadingScreen 以及 FpsReducer 配置
+                // 1. 自动清洗 lwjgl3ify.cfg、BetterLoadingScreen、FpsReducer、Angelica 以及 options.txt 配置
                 GTNHProfileHelper.sanitizeLwjgl3ifyConfig(gameDir);
                 GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
                 GTNHProfileHelper.sanitizeFpsReducerConfig(gameDir);
+                GTNHProfileHelper.sanitizeAngelicaConfig(gameDir);
+                GTNHProfileHelper.sanitizeOptionsTxt(gameDir);
 
                 // 解除 VSync 强制锁定，允许高刷跑满 200+ FPS
                 LauncherPreferences.PREF_FORCE_VSYNC = false;

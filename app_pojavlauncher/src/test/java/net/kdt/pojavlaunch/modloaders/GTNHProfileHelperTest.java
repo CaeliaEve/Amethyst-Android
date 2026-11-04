@@ -186,6 +186,55 @@ public class GTNHProfileHelperTest {
     }
 
     @Test
+    public void testSanitizeAngelicaConfig() throws IOException {
+        File gameDir = tempFolder.newFolder("gtnhAngelicaGame");
+        File cfgDir = new File(gameDir, "config");
+        cfgDir.mkdirs();
+
+        File optionsJson = new File(cfgDir, "angelica-options.json");
+        String badJson = "{\"advanced\":{\"streaming_upload_strategy\":\"MAP_BUFFER_RANGE\",\"vsync_mode\":\"ON\",\"multi_draw_mode\":\"INDIRECT\",\"allow_direct_memory_access\":true},\"reducer\":{\"enabled\":true,\"limit_menu_frame_rate\":true}}";
+        try (FileWriter writer = new FileWriter(optionsJson)) {
+            writer.write(badJson);
+        }
+
+        File modulesCfg = new File(cfgDir, "angelica-modules.cfg");
+        String badCfg = "general {\n    B:enableDSA=true\n}\n";
+        try (FileWriter writer = new FileWriter(modulesCfg)) {
+            writer.write(badCfg);
+        }
+
+        GTNHProfileHelper.sanitizeAngelicaConfig(gameDir);
+
+        String jsonResult = new String(Files.readAllBytes(optionsJson.toPath()), "UTF-8");
+        Assert.assertTrue(jsonResult.contains("\"BUFFER_SUB_DATA\""));
+        Assert.assertTrue(jsonResult.contains("\"OFF\""));
+        Assert.assertTrue(jsonResult.contains("\"DIRECT\""));
+        Assert.assertTrue(jsonResult.contains("\"allow_direct_memory_access\": false") || jsonResult.contains("\"allow_direct_memory_access\":false"));
+        Assert.assertTrue(jsonResult.contains("\"limit_menu_frame_rate\": false") || jsonResult.contains("\"limit_menu_frame_rate\":false"));
+
+        String cfgResult = new String(Files.readAllBytes(modulesCfg.toPath()));
+        Assert.assertTrue(cfgResult.contains("B:enableDSA=false"));
+        Assert.assertFalse(cfgResult.contains("B:enableDSA=true"));
+    }
+
+    @Test
+    public void testSanitizeOptionsTxt() throws IOException {
+        File gameDir = tempFolder.newFolder("gtnhOptionsGame");
+        File optFile = new File(gameDir, "options.txt");
+        try (FileWriter writer = new FileWriter(optFile)) {
+            writer.write("fov:0.5\nenableVsync:true\nmaxFps:60\n");
+        }
+
+        GTNHProfileHelper.sanitizeOptionsTxt(gameDir);
+
+        String result = new String(Files.readAllBytes(optFile.toPath()));
+        Assert.assertTrue(result.contains("enableVsync:false"));
+        Assert.assertFalse(result.contains("enableVsync:true"));
+        Assert.assertTrue(result.contains("maxFps:260"));
+        Assert.assertFalse(result.contains("maxFps:60"));
+    }
+
+    @Test
     public void testGetRecommendedJvmArgs() {
         List<String> args = GTNHProfileHelper.getRecommendedJvmArgs(6144);
         Assert.assertTrue(args.contains("-Dfile.encoding=UTF-8"));

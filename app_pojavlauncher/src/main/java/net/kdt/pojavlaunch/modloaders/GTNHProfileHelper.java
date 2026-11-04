@@ -6,13 +6,20 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 public class GTNHProfileHelper {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     /**
      * 检测目标目录是否为 GTNH 实例
@@ -207,6 +214,115 @@ public class GTNHProfileHelper {
                         file.renameTo(disabled);
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * 自动清洗与修正 Angelica 配置与模块设置，避免移动端 Mali GPU 上的 256MB 缓冲区映射抖动与间接绘制卡顿
+     */
+    public static void sanitizeAngelicaConfig(File gameDir) throws IOException {
+        if (gameDir == null) return;
+        File configDir = new File(gameDir, "config");
+        if (!configDir.exists()) configDir.mkdirs();
+
+        // 1. 清洗 config/angelica-options.json
+        File optionsJson = new File(configDir, "angelica-options.json");
+        try {
+            JsonObject root;
+            if (optionsJson.exists()) {
+                String content = new String(Files.readAllBytes(optionsJson.toPath()), "UTF-8");
+                root = JsonParser.parseString(content).getAsJsonObject();
+            } else {
+                root = new JsonObject();
+            }
+
+            JsonObject advanced = root.has("advanced") && root.get("advanced").isJsonObject()
+                    ? root.getAsJsonObject("advanced") : new JsonObject();
+            advanced.addProperty("streaming_upload_strategy", "BUFFER_SUB_DATA");
+            advanced.addProperty("vsync_mode", "OFF");
+            advanced.addProperty("multi_draw_mode", "DIRECT");
+            advanced.addProperty("allow_direct_memory_access", false);
+            root.add("advanced", advanced);
+
+            JsonObject reducer = root.has("reducer") && root.get("reducer").isJsonObject()
+                    ? root.getAsJsonObject("reducer") : new JsonObject();
+            reducer.addProperty("enabled", false);
+            reducer.addProperty("limit_menu_frame_rate", false);
+            root.add("reducer", reducer);
+
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(optionsJson))) {
+                writer.write(GSON.toJson(root));
+            }
+        } catch (Exception ignored) {
+        }
+
+        // 2. 清洗 config/angelica-modules.cfg
+        File modulesCfg = new File(configDir, "angelica-modules.cfg");
+        if (modulesCfg.exists()) {
+            List<String> lines = new ArrayList<>();
+            boolean foundDsa = false;
+            try (BufferedReader reader = new BufferedReader(new FileReader(modulesCfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.trim().startsWith("B:enableDSA=")) {
+                        lines.add("    B:enableDSA=false");
+                        foundDsa = true;
+                    } else {
+                        lines.add(line);
+                    }
+                }
+            }
+            if (!foundDsa) {
+                lines.add("general {");
+                lines.add("    B:enableDSA=false");
+                lines.add("}");
+            }
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(modulesCfg))) {
+                for (String l : lines) {
+                    writer.write(l);
+                    writer.newLine();
+                }
+            }
+        }
+    }
+
+    /**
+     * 自动清洗 options.txt，解除垂直同步并将最大帧率上限调整为 260
+     */
+    public static void sanitizeOptionsTxt(File gameDir) throws IOException {
+        if (gameDir == null) return;
+        File optionsFile = new File(gameDir, "options.txt");
+        if (!optionsFile.exists()) return;
+
+        List<String> lines = new ArrayList<>();
+        boolean foundVsync = false;
+        boolean foundMaxFps = false;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(optionsFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("enableVsync:")) {
+                    lines.add("enableVsync:false");
+                    foundVsync = true;
+                } else if (line.startsWith("maxFps:")) {
+                    lines.add("maxFps:260");
+                    foundMaxFps = true;
+                } else {
+                    lines.add(line);
+                }
+            }
+        }
+        if (!foundVsync) {
+            lines.add("enableVsync:false");
+        }
+        if (!foundMaxFps) {
+            lines.add("maxFps:260");
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(optionsFile))) {
+            for (String l : lines) {
+                writer.write(l);
+                writer.newLine();
             }
         }
     }
