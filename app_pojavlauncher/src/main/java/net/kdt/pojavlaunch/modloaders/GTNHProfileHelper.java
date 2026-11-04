@@ -248,11 +248,17 @@ public class GTNHProfileHelper {
 
         String current = existingArgs.trim();
 
-        // 清理与 ZGC 冲突的其他 GC 参数（如 G1GC、ParallelGC、SerialGC、ShenandoahGC、CMS 等）
+        // 清理与 ZGC 冲突的其他 GC 参数（如 G1GC、ParallelGC、SerialGC、ShenandoahGC、CMS 等）以及致帧数暴跌的残留激进参数
         if (recommendedArgs.contains("-XX:+UseZGC")) {
             current = current.replaceAll("-XX:[+-]Use(G1GC|ParallelGC|SerialGC|ShenandoahGC|ConcMarkSweepGC)\\b", "")
                              .replaceAll("-XX:-UseZGC\\b", "")
-                             .replaceAll("-XX:-ZGenerational\\b", "");
+                             .replaceAll("-XX:-ZGenerational\\b", "")
+                             .replaceAll("-XX:G1ReservePercent=\\d+\\b", "")
+                             .replaceAll("-XX:InitiatingHeapOccupancyPercent=\\d+\\b", "")
+                             .replaceAll("-XX:MaxGCPauseMillis=\\d+\\b", "")
+                             .replaceAll("-XX:Tier4InvocationThreshold=\\d+\\b", "")
+                             .replaceAll("-XX:Tier3InvocationThreshold=\\d+\\b", "")
+                             .replaceAll("-XX:Tier3CompileThreshold=\\d+\\b", "");
         }
 
         // 提取推荐参数中的 -Xmx 与 -Xms

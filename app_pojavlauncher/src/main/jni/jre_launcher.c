@@ -32,6 +32,8 @@
 #include <unistd.h>
 // Boardwalk: missing include
 #include <string.h>
+#include <signal.h>
+#include <ucontext.h>
 
 #include "log.h"
 #include "utils.h"
@@ -122,6 +124,37 @@ static void abort_waiter_setup() {
     }
 }
 
+static void sigsys_handler(int sig, siginfo_t *info, void *context) {
+    ucontext_t *ctx = (ucontext_t *)context;
+#if defined(__aarch64__)
+    LOGW("SIGSYS caught blocked syscall %d (x8=%lld) at pc=%p, emulating -ENOSYS",
+         info ? info->si_syscall : -1, (long long)ctx->uc_mcontext.regs[8], (void*)ctx->uc_mcontext.pc);
+    ctx->uc_mcontext.regs[0] = -ENOSYS;
+    ctx->uc_mcontext.pc += 4;
+#elif defined(__arm__)
+    LOGW("SIGSYS caught blocked syscall %d at pc=%p, emulating -ENOSYS",
+         info ? info->si_syscall : -1, (void*)ctx->uc_mcontext.arm_pc);
+    ctx->uc_mcontext.arm_r0 = -ENOSYS;
+    ctx->uc_mcontext.arm_pc += 4;
+#elif defined(__x86_64__)
+    LOGW("SIGSYS caught blocked syscall %d at rip=%p, emulating -ENOSYS",
+         info ? info->si_syscall : -1, (void*)ctx->uc_mcontext.gregs[REG_RIP]);
+    ctx->uc_mcontext.gregs[REG_RAX] = -ENOSYS;
+    ctx->uc_mcontext.gregs[REG_RIP] += 2;
+#else
+    LOGE("Unhandled SIGSYS on unknown arch, aborting");
+    abort();
+#endif
+}
+
+static void sigsys_setup() {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = sigsys_handler;
+    sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+    sigaction(SIGSYS, &sa, NULL);
+}
+
 static jint launchJVM(int margc, char** margv) {
     bigcore_set_affinity();
    void* libjli = dlopen("libjli.so", RTLD_LAZY | RTLD_GLOBAL);
@@ -135,11 +168,13 @@ static jint launchJVM(int margc, char** margv) {
        // temporary and will be replaced by the Java VM's signal/crash handler.
        // Work around the warning by using SIG_IGN for SIGSEGV
        if(sigid == SIGSEGV) clean_sa.sa_handler = SIG_IGN;
+       else if(sigid == SIGSYS) continue;
        else clean_sa.sa_handler = SIG_DFL;
        sigaction(sigid, &clean_sa, NULL);
    }
    // Set up the thread that will abort the launcher with an user-facing dialog on a signal.
    abort_waiter_setup();
+   sigsys_setup();
 
    // Boardwalk: silence
    // LOGD("JLI lib = %x", (int)libjli);

@@ -284,7 +284,7 @@ public class GTNHProfileHelperTest {
 
     @Test
     public void testMergeJvmArgsCleansConflictingGcsAndNoverify() {
-        String existing = "-XX:+UseParallelGC -XX:+UseSerialGC -XX:+UseShenandoahGC -XX:+UseG1GC -XX:-UseZGC";
+        String existing = "-XX:+UseParallelGC -XX:+UseSerialGC -XX:+UseShenandoahGC -XX:+UseG1GC -XX:-UseZGC -XX:MaxGCPauseMillis=20 -XX:Tier4InvocationThreshold=4000 -XX:G1ReservePercent=15 -XX:InitiatingHeapOccupancyPercent=45";
         List<String> recArgs = GTNHProfileHelper.getRecommendedJvmArgs(6144);
         String merged = GTNHProfileHelper.mergeJvmArgs(existing, recArgs);
 
@@ -293,6 +293,10 @@ public class GTNHProfileHelperTest {
         Assert.assertFalse(merged.contains("-XX:+UseShenandoahGC"));
         Assert.assertFalse(merged.contains("-XX:+UseG1GC"));
         Assert.assertFalse(merged.contains("-XX:-UseZGC"));
+        Assert.assertFalse(merged.contains("-XX:MaxGCPauseMillis=20"));
+        Assert.assertFalse(merged.contains("-XX:Tier4InvocationThreshold=4000"));
+        Assert.assertFalse(merged.contains("-XX:G1ReservePercent=15"));
+        Assert.assertFalse(merged.contains("-XX:InitiatingHeapOccupancyPercent=45"));
         Assert.assertTrue(merged.contains("-XX:+UseZGC"));
         Assert.assertTrue(merged.contains("-XX:+ZGenerational"));
 
