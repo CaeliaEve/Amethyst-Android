@@ -254,6 +254,10 @@ public class LauncherPreferences {
         MGConfigJson.put("enableExtTimerQuery", timerQueryExt);
         MGConfigJson.put("enableExtDirectStateAccess", dsaExt);
         MGConfigJson.put("maxGlslCacheSize", Integer.parseInt(DEFAULT_PREF.getString("mg_renderer_setting_glsl_cache_size", "128")));
+        MGConfigJson.put("multidrawOrder", "basevertex > unroll");
+        MGConfigJson.put("multidrawOrderElementsBaseVertex", "basevertex > unroll");
+        MGConfigJson.put("multidrawOrderElements", "unroll");
+        MGConfigJson.put("multidrawOrderArrays", "unroll");
         File configFile = new File(Tools.DIR_DATA + "/MobileGlues", "config.json");
         FileUtils.ensureParentDirectory(configFile);
         try {
