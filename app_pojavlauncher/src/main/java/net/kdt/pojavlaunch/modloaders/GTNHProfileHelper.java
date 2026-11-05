@@ -18,8 +18,29 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile;
+
 public class GTNHProfileHelper {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+
+    /**
+     * Avoid the native Mali texture-upload bottleneck observed on XRing O1 with GTNH.
+     * Apply once per profile; a saved user choice always takes precedence.
+     * @return whether the caller needs to persist the profile
+     */
+    public static boolean applyXringO1RendererDefaults(MinecraftProfile profile, File gameDir,
+                                                      String socManufacturer, String socModel) {
+        if (profile.anglePreferenceSet
+                || !"XRing".equalsIgnoreCase(socManufacturer)
+                || !"O1".equalsIgnoreCase(socModel)
+                || (profile.pojavRendererName != null
+                    && !"opengles_mobileglues".equals(profile.pojavRendererName))
+                || !isGTNHInstance(gameDir)) {
+            return false;
+        }
+        profile.setAnglePreference(true);
+        return true;
+    }
 
     /**
      * 检测目标目录是否为 GTNH 实例

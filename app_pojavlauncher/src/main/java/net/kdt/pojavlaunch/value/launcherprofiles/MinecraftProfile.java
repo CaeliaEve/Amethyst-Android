@@ -21,6 +21,8 @@ public class MinecraftProfile {
 	public boolean logConfigIsXML;
 	public String pojavRendererName;
 	public boolean useANGLE;
+	// True after a user choice or a one-time device default, so launches preserve it.
+	public boolean anglePreferenceSet;
 	public String controlFile;
 	public MinecraftResolution[] resolution;
 
@@ -41,6 +43,11 @@ public class MinecraftProfile {
 
 	public MinecraftProfile(){}
 
+	public void setAnglePreference(boolean enabled) {
+		useANGLE = enabled;
+		anglePreferenceSet = true;
+	}
+
 	public MinecraftProfile(MinecraftProfile profile){
 		name = profile.name;
 		type = profile.type;
@@ -57,5 +64,6 @@ public class MinecraftProfile {
 		controlFile = profile.controlFile;
 		resolution = profile.resolution;
 		useANGLE = profile.useANGLE;
+		anglePreferenceSet = profile.anglePreferenceSet;
 	}
 }

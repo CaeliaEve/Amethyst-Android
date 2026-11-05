@@ -135,11 +135,8 @@ public class MinecraftGLSurface extends View implements GrabListener, DirectGame
         // Angelica has some rendering issues if you tab out on SurfaceView in LWJGL3ify 2.x
         // FIXME: LWJGL3ify 3.x does not like when surface randomly dies on SurfaceView
         // (it doesnt swap to 1x1 pbuffer cause it uses sdl for swap instead of glfw)
-        try {
-            useSurfaceView = useSurfaceView && !LOCAL_RENDERER.equals("opengles3_desktopgl_zink_kopper") &&
-                    !Tools.hasMods("angelica") &&
-                    !Tools.hasMods("lwjgl3ify-3");
-        } catch (NullPointerException ignored){}
+        useSurfaceView = shouldUseSurfaceView(useSurfaceView, LOCAL_RENDERER,
+                Tools.hasMods("angelica"), Tools.hasMods("lwjgl3ify-3"));
         if(useSurfaceView){
             SurfaceView surfaceView = new SurfaceView(getContext());
             mSurface = surfaceView;
@@ -429,6 +426,13 @@ public class MinecraftGLSurface extends View implements GrabListener, DirectGame
         if(glfwButton == -256) return false;
         sendMouseButton(glfwButton, status);
         return true;
+    }
+
+    /** The default renderer is still null here; it must not bypass mod compatibility checks. */
+    static boolean shouldUseSurfaceView(boolean requested, String renderer,
+                                        boolean hasAngelica, boolean hasLwjgl3ify3) {
+        return requested && !"opengles3_desktopgl_zink_kopper".equals(renderer)
+                && !hasAngelica && !hasLwjgl3ify3;
     }
 
     /** Called when the size need to be set at any point during the surface lifecycle **/

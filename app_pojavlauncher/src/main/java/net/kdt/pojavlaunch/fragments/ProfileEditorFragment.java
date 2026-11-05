@@ -125,7 +125,7 @@ public class ProfileEditorFragment extends Fragment implements CropperUtils.Crop
         mVersionSelectButton.setOnClickListener(versionSelectListener);
         mDefaultVersion.setOnClickListener(versionSelectListener);
 
-        mUseANGLE.setOnClickListener(v -> mTempProfile.useANGLE = ((CheckBox) v).isChecked());
+        mUseANGLE.setOnClickListener(v -> mTempProfile.setAnglePreference(((CheckBox) v).isChecked()));
 
         // Set up the icon change click listener
         mProfileIcon.setOnClickListener(v -> CropperUtils.startCropper(mCropperLauncher));

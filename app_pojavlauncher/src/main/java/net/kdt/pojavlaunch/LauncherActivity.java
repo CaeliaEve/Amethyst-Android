@@ -210,6 +210,14 @@ public class LauncherActivity extends BaseActivity {
         }
         if (GTNHProfileHelper.isGTNHInstance(gameDir)) {
             try {
+                // Persist the renderer default independently of the selected Java runtime.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                        && GTNHProfileHelper.applyXringO1RendererDefaults(
+                                prof, gameDir, Build.SOC_MANUFACTURER, Build.SOC_MODEL)) {
+                    LauncherProfiles.write();
+                    Log.i("GTNH-Launch", "Applied one-time ANGLE default for XRing O1 GTNH profile");
+                }
+
                 // 1. 自动清洗 lwjgl3ify.cfg、BetterLoadingScreen、FpsReducer、Angelica 以及 options.txt 配置
                 GTNHProfileHelper.sanitizeLwjgl3ifyConfig(gameDir);
                 GTNHProfileHelper.sanitizeBetterLoadingScreenConfig(gameDir);
